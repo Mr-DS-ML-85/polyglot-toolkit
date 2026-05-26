@@ -1,0 +1,64 @@
+# PolyglotShield Configuration
+# Optimized for Ryzen 7 7700 + RTX 4060 + 32GB RAM
+# Author: Mr-DS-ML-85
+
+model:
+  path: models/polyglot_shield.cbm
+  task_type: GPU
+  iterations: 1200
+  learning_rate: 0.04
+  depth: 8
+  l2_leaf_reg: 5
+  border_count: 254
+  random_seed: 42
+  eval_metric: Logloss
+  early_stopping_rounds: 80
+  verbose: 0
+  class_weights: [1.0, 3.0]
+  gpu_ram_fraction: 0.7
+
+features:
+  max_file_size_mb: 100
+  chunk_count: 16
+  string_min_len: 4
+
+yara:
+  rules_dir: rules
+  auto_generate: true
+
+monitor:
+  watch_dirs:
+    - ~/Downloads
+  recursive: true
+  scan_delay_sec: 1.5
+  max_workers: 4
+
+quarantine:
+  dir: quarantine
+  encrypt_names: true
+  max_size_mb: 500
+  retain_days: 30
+
+notifications:
+  enabled: true
+  sound: true
+  critical_only: false
+  popup_duration_sec: 8
+
+logging:
+  level: INFO
+  file: logs/polyglot_shield.log
+  max_bytes: 10000000
+  backup_count: 5
+
+thresholds:
+  detect: 0.65
+  quarantine: 0.80
+  alert: 0.50
+
+gui:
+  theme: dark
+  font_family: Segoe UI
+  font_size: 10
+  window_width: 1280
+  window_height: 800

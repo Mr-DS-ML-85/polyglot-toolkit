@@ -1,84 +1,72 @@
-# Polyglot Toolkit — Red Team Edition
+# Polyglot Toolkit v3.0 — Red Team + Shield Edition
 
-Red team security toolkit for building, detecting, and sanitizing polyglot files — valid documents that secretly contain hidden payloads.
+Red team offensive toolkit + ML-powered defensive shield in one unified application.
 
 ## Features
 
-### ◆ Builder — Attack Vectors
-- **Standard Polyglot** — payload hidden after file end markers (JPEG, PNG, GIF, PDF, ZIP, MP4)
-- **FUD Cryptor** — multi-layer obfuscation (XOR + zlib + b85 encoding) to evade AV detection
-- **MIME-Type Confusion** — prepend fake headers to disguise payload type
-- **Covert Archive Embedding** — embed payloads inside ZIP/archive structures
-- **XOR Encryption** — optional payload encryption with random 32-byte key
-- **EXE→Image wrapping** — hide executables inside image files
-- **Script→Media disguise** — BAT→MP4, VBS→JPG script-to-media conversion
-- **Icon manipulation** — replace EXE icons with cover file icons
+### ◆ Builder (Offense)
+- **Standard Polyglot** — payload after end markers (JPEG/PNG/GIF/PDF/ZIP/MP4)
+- **FUD Cryptor** — multi-layer obfuscation (XOR+zlib+b85) to evade AV
+- **MIME-Type Confusion** — fake headers to disguise payload type
+- **Covert Archive Embedding** — payload in ZIP structures
+- **XOR Encryption** — random 32-byte key encryption
 
-### ⚠ Detector
-- Extension vs content-type mismatch detection
-- Hidden PE/ELF/script signature scanning
-- Trailing data detection after file end markers
-- Entropy analysis (8-section) for encrypted/compressed payloads
-- MIME confusion attack detection
-- Recursive directory scanning
-
-### 🛡 Sanitizer
-- Strip hidden data after JPEG EOI, PNG IEND, GIF terminator, PDF %%EOF
-- ZIP trimming to end of central directory
-- Automatic `.bak` backup creation
+### ⚠ Scanner (Defense)
+- **ML Detection** — CatBoost GPU classifier on 338 features
+- **YARA Rules** — 26 built-in rules targeting RedTeam Builder patterns
+- **Signature Scanning** — PE/ELF/script hidden signature detection
+- **Entropy Analysis** — 8-section Shannon entropy for encrypted payloads
+- **Trailing Data Detection** — hidden data after file end markers
+- **MIME Confusion Detection** — dual-header polyglot detection
 
 ### ▶ Real-Time Monitor
-- Directory watching for new/modified files
-- Desktop notifications (Linux/macOS/Windows)
-- Alert sounds on threat detection
+- Watchdog-based folder monitoring with debounce
+- Auto-scan new/modified files
+- Desktop push notifications (Linux/macOS/Windows)
+- Alert sounds on critical findings
+
+### 🧠 ML Training
+- Synthetic data generation (12 polyglot + 9 benign types)
+- CatBoost GPU training (RTX 4060 optimized)
+- Feature importance analysis
+- Train/eval split with early stopping
+
+### 🛡 Quarantine
+- Encrypted vault with masked filenames
+- Restore/delete/purge expired
+- Full audit trail (JSONL metadata)
+
+### 📋 YARA Rules Viewer
+- 26 built-in rules with severity color-coding
+- Targets: PE-in-PDF, ELF-in-ZIP, Cobalt Strike, Metasploit, UPX packing, shellcode
 
 ## Quick Start
 
 ```bash
-# Interactive TUI (terminal)
-./polyglot
-
-# PyQt6 GUI
+# GUI (PyQt6 — 9 panels)
 ./polyglot gui
 
-# Direct CLI commands
-./polyglot build cover.jpg payload.exe --type jpeg --encrypt
-./polyglot scan ~/Downloads
-./polyglot sanitize suspicious_image.jpg
-./polyglot monitor ~/Downloads
+# TUI (Rich terminal)
+./polyglot
 
-# Help
-./polyglot help
+# CLI commands
+./polyglot build cover.jpg payload.exe --type jpeg --encrypt --fud
+./polyglot scan ~/Downloads
+./polyglot sanitize suspicious.jpg
+./polyglot monitor ~/Downloads
 ```
+
+## First Time Setup
+
+1. Launch GUI → **ML Training** → Generate Synthetic → Train Model
+2. **Scanner** → Check "Use ML Model" → Scan files
+3. **Monitor** → Start watching ~/Downloads
 
 ## Requirements
 
 - Python 3.10+ (tested on 3.14)
 - UV package manager (auto-installs deps)
-- PyQt6 (for GUI — auto-installed by launcher)
-- rich (for TUI — auto-installed by launcher)
-- `notify-send` on Linux, `osascript` on macOS, PowerShell on Windows
-
-## Project Structure
-
-```
-polyglot-toolkit/
-├── polyglot           # Launcher script (./polyglot gui|tui|build|scan|sanitize|monitor)
-├── polyglot_app.py    # PyQt6 GUI application
-├── polyglot_tui.py    # TUI + CLI application
-├── README.md
-├── LICENSE
-└── .venv/             # UV-managed virtual environment
-```
-
-## Defense Strategies
-
-1. **Scan before opening** — Use the Detector to check any suspicious file
-2. **Sanitize received images** — Run the Sanitizer on downloaded files
-3. **Monitor download folders** — Use the Real-Time Monitor on ~/Downloads
-4. **Check file signatures** — Content-type vs extension mismatch = red flag
-5. **Audit with YARA** — Complement with YARA rules for known polyglot patterns
-6. **Sandbox execution** — Never run untrusted binaries directly
+- PyQt6, rich, catboost, numpy, scikit-learn, watchdog, pyyaml
 
 ## Author
 
