@@ -1,0 +1,4054 @@
+[
+  {
+    "filepath": "training_data/malware/exe_in_jpg_0000.jpg",
+    "label": 1,
+    "type": "exe_in_jpg",
+    "severity": "critical",
+    "file_size": 5300,
+    "entropy": 7.961712272260898,
+    "hidden_patterns": [
+      "PE",
+      "ZIP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/exe_in_jpg_0001.jpg",
+    "label": 1,
+    "type": "exe_in_jpg",
+    "severity": "critical",
+    "file_size": 3878,
+    "entropy": 7.9527179424977845,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_jpg_0002.jpg",
+    "label": 1,
+    "type": "exe_in_jpg",
+    "severity": "critical",
+    "file_size": 2747,
+    "entropy": 4.986940348325761,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_jpg_0003.jpg",
+    "label": 1,
+    "type": "exe_in_jpg",
+    "severity": "critical",
+    "file_size": 3657,
+    "entropy": 7.995085629261424,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_jpg_0004.jpg",
+    "label": 1,
+    "type": "exe_in_jpg",
+    "severity": "critical",
+    "file_size": 2607,
+    "entropy": 7.937763114643162,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_png_0000.png",
+    "label": 1,
+    "type": "exe_in_png",
+    "severity": "critical",
+    "file_size": 4526,
+    "entropy": 6.396856445278304,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_png_0001.png",
+    "label": 1,
+    "type": "exe_in_png",
+    "severity": "critical",
+    "file_size": 2788,
+    "entropy": 6.080118759916331,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_png_0002.png",
+    "label": 1,
+    "type": "exe_in_png",
+    "severity": "critical",
+    "file_size": 4849,
+    "entropy": 5.683259663540886,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_png_0003.png",
+    "label": 1,
+    "type": "exe_in_png",
+    "severity": "critical",
+    "file_size": 4855,
+    "entropy": 7.981959542184482,
+    "hidden_patterns": [
+      "PE",
+      "ZIP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/exe_in_png_0004.png",
+    "label": 1,
+    "type": "exe_in_png",
+    "severity": "critical",
+    "file_size": 5280,
+    "entropy": 7.96767428154541,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_gif_0000.gif",
+    "label": 1,
+    "type": "exe_in_gif",
+    "severity": "critical",
+    "file_size": 2338,
+    "entropy": 6.935737054235778,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_gif_0001.gif",
+    "label": 1,
+    "type": "exe_in_gif",
+    "severity": "critical",
+    "file_size": 7247,
+    "entropy": 6.451546649742051,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_gif_0002.gif",
+    "label": 1,
+    "type": "exe_in_gif",
+    "severity": "critical",
+    "file_size": 1478,
+    "entropy": 7.938229409215388,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_gif_0003.gif",
+    "label": 1,
+    "type": "exe_in_gif",
+    "severity": "critical",
+    "file_size": 3569,
+    "entropy": 6.553112378519671,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_gif_0004.gif",
+    "label": 1,
+    "type": "exe_in_gif",
+    "severity": "critical",
+    "file_size": 3087,
+    "entropy": 6.600905652351292,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_bmp_0000.bmp",
+    "label": 1,
+    "type": "exe_in_bmp",
+    "severity": "critical",
+    "file_size": 5399,
+    "entropy": 7.962978694474826,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_bmp_0001.bmp",
+    "label": 1,
+    "type": "exe_in_bmp",
+    "severity": "critical",
+    "file_size": 5992,
+    "entropy": 7.970248263146528,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_bmp_0002.bmp",
+    "label": 1,
+    "type": "exe_in_bmp",
+    "severity": "critical",
+    "file_size": 5250,
+    "entropy": 7.962856401094228,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_bmp_0003.bmp",
+    "label": 1,
+    "type": "exe_in_bmp",
+    "severity": "critical",
+    "file_size": 2407,
+    "entropy": 7.2404310469682205,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_bmp_0004.bmp",
+    "label": 1,
+    "type": "exe_in_bmp",
+    "severity": "critical",
+    "file_size": 5427,
+    "entropy": 6.956675297601407,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_png_0000.png",
+    "label": 1,
+    "type": "elf_in_png",
+    "severity": "critical",
+    "file_size": 1784,
+    "entropy": 7.888296283006185,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_png_0001.png",
+    "label": 1,
+    "type": "elf_in_png",
+    "severity": "critical",
+    "file_size": 4695,
+    "entropy": 5.3922490596314105,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_png_0002.png",
+    "label": 1,
+    "type": "elf_in_png",
+    "severity": "critical",
+    "file_size": 2545,
+    "entropy": 7.912937089407763,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_png_0003.png",
+    "label": 1,
+    "type": "elf_in_png",
+    "severity": "critical",
+    "file_size": 3108,
+    "entropy": 6.699424019420148,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_png_0004.png",
+    "label": 1,
+    "type": "elf_in_png",
+    "severity": "critical",
+    "file_size": 5284,
+    "entropy": 6.8036281307782875,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_jpg_0000.jpg",
+    "label": 1,
+    "type": "elf_in_jpg",
+    "severity": "critical",
+    "file_size": 7297,
+    "entropy": 7.97624247707462,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_jpg_0001.jpg",
+    "label": 1,
+    "type": "elf_in_jpg",
+    "severity": "critical",
+    "file_size": 3903,
+    "entropy": 7.9482064774806105,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_jpg_0002.jpg",
+    "label": 1,
+    "type": "elf_in_jpg",
+    "severity": "critical",
+    "file_size": 6919,
+    "entropy": 6.992752862883088,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_jpg_0003.jpg",
+    "label": 1,
+    "type": "elf_in_jpg",
+    "severity": "critical",
+    "file_size": 7399,
+    "entropy": 5.926883456062138,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_jpg_0004.jpg",
+    "label": 1,
+    "type": "elf_in_jpg",
+    "severity": "critical",
+    "file_size": 5271,
+    "entropy": 7.986921178261672,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/bat_in_jpg_0000.jpg",
+    "label": 1,
+    "type": "bat_in_jpg",
+    "severity": "high",
+    "file_size": 2408,
+    "entropy": 6.820360885725547,
+    "hidden_patterns": [
+      "BAT"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/bat_in_jpg_0001.jpg",
+    "label": 1,
+    "type": "bat_in_jpg",
+    "severity": "high",
+    "file_size": 3732,
+    "entropy": 7.978406499838109,
+    "hidden_patterns": [
+      "BAT"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/bat_in_jpg_0002.jpg",
+    "label": 1,
+    "type": "bat_in_jpg",
+    "severity": "high",
+    "file_size": 4445,
+    "entropy": 7.996741108468948,
+    "hidden_patterns": [
+      "BAT"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/bat_in_jpg_0003.jpg",
+    "label": 1,
+    "type": "bat_in_jpg",
+    "severity": "high",
+    "file_size": 3727,
+    "entropy": 5.4588722943472625,
+    "hidden_patterns": [
+      "BAT"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/bat_in_jpg_0004.jpg",
+    "label": 1,
+    "type": "bat_in_jpg",
+    "severity": "high",
+    "file_size": 6352,
+    "entropy": 6.942927282504406,
+    "hidden_patterns": [
+      "BAT"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/vbs_in_jpg_0000.jpg",
+    "label": 1,
+    "type": "vbs_in_jpg",
+    "severity": "high",
+    "file_size": 2585,
+    "entropy": 5.047282842170702,
+    "hidden_patterns": [
+      "VBS"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/vbs_in_jpg_0001.jpg",
+    "label": 1,
+    "type": "vbs_in_jpg",
+    "severity": "high",
+    "file_size": 3529,
+    "entropy": 7.938652103243521,
+    "hidden_patterns": [
+      "PE",
+      "VBS"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/vbs_in_jpg_0002.jpg",
+    "label": 1,
+    "type": "vbs_in_jpg",
+    "severity": "high",
+    "file_size": 2467,
+    "entropy": 5.58148717694041,
+    "hidden_patterns": [
+      "VBS"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/vbs_in_jpg_0003.jpg",
+    "label": 1,
+    "type": "vbs_in_jpg",
+    "severity": "high",
+    "file_size": 2774,
+    "entropy": 4.922759064479438,
+    "hidden_patterns": [
+      "VBS"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/vbs_in_jpg_0004.jpg",
+    "label": 1,
+    "type": "vbs_in_jpg",
+    "severity": "high",
+    "file_size": 2862,
+    "entropy": 6.735500758983969,
+    "hidden_patterns": [
+      "VBS"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/ps1_in_png_0000.png",
+    "label": 1,
+    "type": "ps1_in_png",
+    "severity": "high",
+    "file_size": 2667,
+    "entropy": 5.783791343511411,
+    "hidden_patterns": [
+      "POWERSHELL"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/ps1_in_png_0001.png",
+    "label": 1,
+    "type": "ps1_in_png",
+    "severity": "high",
+    "file_size": 7127,
+    "entropy": 7.975673231865512,
+    "hidden_patterns": [
+      "POWERSHELL"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/ps1_in_png_0002.png",
+    "label": 1,
+    "type": "ps1_in_png",
+    "severity": "high",
+    "file_size": 3081,
+    "entropy": 6.70868363740504,
+    "hidden_patterns": [
+      "POWERSHELL"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/ps1_in_png_0003.png",
+    "label": 1,
+    "type": "ps1_in_png",
+    "severity": "high",
+    "file_size": 4770,
+    "entropy": 6.629015724452458,
+    "hidden_patterns": [
+      "POWERSHELL"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/ps1_in_png_0004.png",
+    "label": 1,
+    "type": "ps1_in_png",
+    "severity": "high",
+    "file_size": 1261,
+    "entropy": 6.321312393614445,
+    "hidden_patterns": [
+      "POWERSHELL"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/js_in_gif_0000.gif",
+    "label": 1,
+    "type": "js_in_gif",
+    "severity": "high",
+    "file_size": 4386,
+    "entropy": 6.311309706744833,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/js_in_gif_0001.gif",
+    "label": 1,
+    "type": "js_in_gif",
+    "severity": "high",
+    "file_size": 3716,
+    "entropy": 4.894189916892164,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/js_in_gif_0002.gif",
+    "label": 1,
+    "type": "js_in_gif",
+    "severity": "high",
+    "file_size": 5097,
+    "entropy": 6.9549681619701715,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/js_in_gif_0003.gif",
+    "label": 1,
+    "type": "js_in_gif",
+    "severity": "high",
+    "file_size": 5740,
+    "entropy": 6.33434234891382,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/js_in_gif_0004.gif",
+    "label": 1,
+    "type": "js_in_gif",
+    "severity": "high",
+    "file_size": 5694,
+    "entropy": 7.991290344529067,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/js_in_jpg_0000.jpg",
+    "label": 1,
+    "type": "js_in_jpg",
+    "severity": "high",
+    "file_size": 2355,
+    "entropy": 7.097420255605333,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/js_in_jpg_0001.jpg",
+    "label": 1,
+    "type": "js_in_jpg",
+    "severity": "high",
+    "file_size": 1693,
+    "entropy": 7.885171704010538,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/js_in_jpg_0002.jpg",
+    "label": 1,
+    "type": "js_in_jpg",
+    "severity": "high",
+    "file_size": 2947,
+    "entropy": 6.624369752547069,
+    "hidden_patterns": [
+      "ZIP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/js_in_jpg_0003.jpg",
+    "label": 1,
+    "type": "js_in_jpg",
+    "severity": "high",
+    "file_size": 2962,
+    "entropy": 7.933589469368895,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/js_in_jpg_0004.jpg",
+    "label": 1,
+    "type": "js_in_jpg",
+    "severity": "high",
+    "file_size": 4353,
+    "entropy": 6.772611579747607,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_png_0000.png",
+    "label": 1,
+    "type": "html_in_png",
+    "severity": "high",
+    "file_size": 4108,
+    "entropy": 7.975197584160352,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_png_0001.png",
+    "label": 1,
+    "type": "html_in_png",
+    "severity": "high",
+    "file_size": 4327,
+    "entropy": 7.987863883644386,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_png_0002.png",
+    "label": 1,
+    "type": "html_in_png",
+    "severity": "high",
+    "file_size": 4839,
+    "entropy": 5.608238542890195,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_png_0003.png",
+    "label": 1,
+    "type": "html_in_png",
+    "severity": "high",
+    "file_size": 6821,
+    "entropy": 7.967251412892628,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_png_0004.png",
+    "label": 1,
+    "type": "html_in_png",
+    "severity": "high",
+    "file_size": 1884,
+    "entropy": 4.915061328928477,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_jpg_0000.jpg",
+    "label": 1,
+    "type": "html_in_jpg",
+    "severity": "high",
+    "file_size": 6899,
+    "entropy": 6.946992287537161,
+    "hidden_patterns": [
+      "ZIP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_jpg_0001.jpg",
+    "label": 1,
+    "type": "html_in_jpg",
+    "severity": "high",
+    "file_size": 3420,
+    "entropy": 7.950474598090042,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_jpg_0002.jpg",
+    "label": 1,
+    "type": "html_in_jpg",
+    "severity": "high",
+    "file_size": 5553,
+    "entropy": 6.7286877811978085,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_jpg_0003.jpg",
+    "label": 1,
+    "type": "html_in_jpg",
+    "severity": "high",
+    "file_size": 3562,
+    "entropy": 7.983458287746375,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_jpg_0004.jpg",
+    "label": 1,
+    "type": "html_in_jpg",
+    "severity": "high",
+    "file_size": 4766,
+    "entropy": 7.9793819267155035,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_bmp_0000.bmp",
+    "label": 1,
+    "type": "html_in_bmp",
+    "severity": "high",
+    "file_size": 6212,
+    "entropy": 7.96990482487217,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_bmp_0001.bmp",
+    "label": 1,
+    "type": "html_in_bmp",
+    "severity": "high",
+    "file_size": 5464,
+    "entropy": 7.989071409510892,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_bmp_0002.bmp",
+    "label": 1,
+    "type": "html_in_bmp",
+    "severity": "high",
+    "file_size": 7666,
+    "entropy": 7.974753880911516,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_bmp_0003.bmp",
+    "label": 1,
+    "type": "html_in_bmp",
+    "severity": "high",
+    "file_size": 7007,
+    "entropy": 6.981275747463937,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_bmp_0004.bmp",
+    "label": 1,
+    "type": "html_in_bmp",
+    "severity": "high",
+    "file_size": 2782,
+    "entropy": 7.128408077944245,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "exe_in_pdf",
+    "severity": "critical",
+    "file_size": 5874,
+    "entropy": 7.968301963826931,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "exe_in_pdf",
+    "severity": "critical",
+    "file_size": 2718,
+    "entropy": 7.020966717254444,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "exe_in_pdf",
+    "severity": "critical",
+    "file_size": 4978,
+    "entropy": 7.038052705051232,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "exe_in_pdf",
+    "severity": "critical",
+    "file_size": 4906,
+    "entropy": 7.981757440393914,
+    "hidden_patterns": [
+      "PE",
+      "ZIP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/exe_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "exe_in_pdf",
+    "severity": "critical",
+    "file_size": 4116,
+    "entropy": 7.9501686828924365,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "elf_in_pdf",
+    "severity": "critical",
+    "file_size": 4226,
+    "entropy": 7.954471148631566,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "elf_in_pdf",
+    "severity": "critical",
+    "file_size": 5870,
+    "entropy": 7.160624784660719,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "elf_in_pdf",
+    "severity": "critical",
+    "file_size": 7775,
+    "entropy": 6.300960665970233,
+    "hidden_patterns": [
+      "PE",
+      "ELF"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/elf_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "elf_in_pdf",
+    "severity": "critical",
+    "file_size": 6589,
+    "entropy": 7.987464777422044,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "elf_in_pdf",
+    "severity": "critical",
+    "file_size": 5347,
+    "entropy": 6.814994494970058,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "php_in_pdf",
+    "severity": "critical",
+    "file_size": 1281,
+    "entropy": 6.9770379534935625,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "php_in_pdf",
+    "severity": "critical",
+    "file_size": 2538,
+    "entropy": 7.711774424613749,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "php_in_pdf",
+    "severity": "critical",
+    "file_size": 1483,
+    "entropy": 7.865691385891626,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "php_in_pdf",
+    "severity": "critical",
+    "file_size": 1156,
+    "entropy": 6.934529595735267,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "php_in_pdf",
+    "severity": "critical",
+    "file_size": 1452,
+    "entropy": 7.366353678893981,
+    "hidden_patterns": [
+      "ZIP",
+      "PHP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/html_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "html_in_pdf",
+    "severity": "high",
+    "file_size": 4228,
+    "entropy": 7.965524702038955,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "html_in_pdf",
+    "severity": "high",
+    "file_size": 3651,
+    "entropy": 6.373315115413,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "html_in_pdf",
+    "severity": "high",
+    "file_size": 4501,
+    "entropy": 6.160796899409805,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "html_in_pdf",
+    "severity": "high",
+    "file_size": 1448,
+    "entropy": 6.016907857508065,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/html_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "html_in_pdf",
+    "severity": "high",
+    "file_size": 5202,
+    "entropy": 7.961356937251375,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "zip_in_pdf",
+    "severity": "medium",
+    "file_size": 7294,
+    "entropy": 7.989065125880962,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "zip_in_pdf",
+    "severity": "medium",
+    "file_size": 4832,
+    "entropy": 6.521006284185027,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "zip_in_pdf",
+    "severity": "medium",
+    "file_size": 2867,
+    "entropy": 7.585118630412694,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "zip_in_pdf",
+    "severity": "medium",
+    "file_size": 5331,
+    "entropy": 7.986588194066885,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "zip_in_pdf",
+    "severity": "medium",
+    "file_size": 6081,
+    "entropy": 5.983130408975915,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/wav_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "wav_in_pdf",
+    "severity": "medium",
+    "file_size": 3620,
+    "entropy": 6.429981083974802,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/wav_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "wav_in_pdf",
+    "severity": "medium",
+    "file_size": 2859,
+    "entropy": 7.931190637990919,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/wav_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "wav_in_pdf",
+    "severity": "medium",
+    "file_size": 930,
+    "entropy": 6.035860850646944,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/wav_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "wav_in_pdf",
+    "severity": "medium",
+    "file_size": 1855,
+    "entropy": 7.933315210833159,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/wav_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "wav_in_pdf",
+    "severity": "medium",
+    "file_size": 5247,
+    "entropy": 6.244785248777339,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/tar_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "tar_in_pdf",
+    "severity": "medium",
+    "file_size": 5154,
+    "entropy": 7.384121735421398,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/tar_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "tar_in_pdf",
+    "severity": "medium",
+    "file_size": 5568,
+    "entropy": 6.365094626124467,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/tar_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "tar_in_pdf",
+    "severity": "medium",
+    "file_size": 5965,
+    "entropy": 7.024379652368072,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/tar_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "tar_in_pdf",
+    "severity": "medium",
+    "file_size": 5555,
+    "entropy": 7.9663328447811725,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/tar_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "tar_in_pdf",
+    "severity": "medium",
+    "file_size": 5053,
+    "entropy": 7.960858604099506,
+    "hidden_patterns": [
+      "ZIP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/mp3_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "mp3_in_pdf",
+    "severity": "medium",
+    "file_size": 4082,
+    "entropy": 7.435410778432553,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/mp3_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "mp3_in_pdf",
+    "severity": "medium",
+    "file_size": 4408,
+    "entropy": 5.056873999862524,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/mp3_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "mp3_in_pdf",
+    "severity": "medium",
+    "file_size": 2275,
+    "entropy": 4.826510595885278,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/mp3_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "mp3_in_pdf",
+    "severity": "medium",
+    "file_size": 6010,
+    "entropy": 6.202009900883942,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/mp3_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "mp3_in_pdf",
+    "severity": "medium",
+    "file_size": 6763,
+    "entropy": 5.939823635451187,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/sh_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "sh_in_pdf",
+    "severity": "high",
+    "file_size": 5153,
+    "entropy": 7.974876785595444,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/sh_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "sh_in_pdf",
+    "severity": "high",
+    "file_size": 4119,
+    "entropy": 7.94007753035607,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/sh_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "sh_in_pdf",
+    "severity": "high",
+    "file_size": 6266,
+    "entropy": 6.340781943480141,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/sh_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "sh_in_pdf",
+    "severity": "high",
+    "file_size": 3836,
+    "entropy": 6.641368078456244,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/sh_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "sh_in_pdf",
+    "severity": "high",
+    "file_size": 3712,
+    "entropy": 6.546690491234937,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/apk_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "apk_in_pdf",
+    "severity": "high",
+    "file_size": 6300,
+    "entropy": 5.960089862192625,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/apk_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "apk_in_pdf",
+    "severity": "high",
+    "file_size": 2831,
+    "entropy": 7.625559641991519,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/apk_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "apk_in_pdf",
+    "severity": "high",
+    "file_size": 3391,
+    "entropy": 7.944882145396548,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/apk_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "apk_in_pdf",
+    "severity": "high",
+    "file_size": 3296,
+    "entropy": 6.3277034733854265,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/apk_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "apk_in_pdf",
+    "severity": "high",
+    "file_size": 4076,
+    "entropy": 7.953404114636247,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_docx_0000.docx",
+    "label": 1,
+    "type": "jar_in_docx",
+    "severity": "critical",
+    "file_size": 4270,
+    "entropy": 7.955726696137229,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_docx_0001.docx",
+    "label": 1,
+    "type": "jar_in_docx",
+    "severity": "critical",
+    "file_size": 2908,
+    "entropy": 7.938206693311702,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_docx_0002.docx",
+    "label": 1,
+    "type": "jar_in_docx",
+    "severity": "critical",
+    "file_size": 5210,
+    "entropy": 6.92884084757922,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_docx_0003.docx",
+    "label": 1,
+    "type": "jar_in_docx",
+    "severity": "critical",
+    "file_size": 5398,
+    "entropy": 7.98931613960281,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_docx_0004.docx",
+    "label": 1,
+    "type": "jar_in_docx",
+    "severity": "critical",
+    "file_size": 1710,
+    "entropy": 5.65151092134665,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/elf_in_docx_0000.docx",
+    "label": 1,
+    "type": "elf_in_docx",
+    "severity": "critical",
+    "file_size": 4036,
+    "entropy": 7.391225513058953,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_docx_0001.docx",
+    "label": 1,
+    "type": "elf_in_docx",
+    "severity": "critical",
+    "file_size": 5831,
+    "entropy": 7.972096287732446,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_docx_0002.docx",
+    "label": 1,
+    "type": "elf_in_docx",
+    "severity": "critical",
+    "file_size": 5158,
+    "entropy": 7.9600633160069805,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_docx_0003.docx",
+    "label": 1,
+    "type": "elf_in_docx",
+    "severity": "critical",
+    "file_size": 4362,
+    "entropy": 7.960929017557614,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_docx_0004.docx",
+    "label": 1,
+    "type": "elf_in_docx",
+    "severity": "critical",
+    "file_size": 1708,
+    "entropy": 5.670459812173219,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/vbs_in_doc_0000.doc",
+    "label": 1,
+    "type": "vbs_in_doc",
+    "severity": "high",
+    "file_size": 4969,
+    "entropy": 5.663351000491373,
+    "hidden_patterns": [
+      "VBS"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/vbs_in_doc_0001.doc",
+    "label": 1,
+    "type": "vbs_in_doc",
+    "severity": "high",
+    "file_size": 5203,
+    "entropy": 7.985473991835356,
+    "hidden_patterns": [
+      "VBS"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/vbs_in_doc_0002.doc",
+    "label": 1,
+    "type": "vbs_in_doc",
+    "severity": "high",
+    "file_size": 4557,
+    "entropy": 6.913845601891541,
+    "hidden_patterns": [
+      "VBS"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/vbs_in_doc_0003.doc",
+    "label": 1,
+    "type": "vbs_in_doc",
+    "severity": "high",
+    "file_size": 7408,
+    "entropy": 6.391678839401099,
+    "hidden_patterns": [
+      "VBS"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/vbs_in_doc_0004.doc",
+    "label": 1,
+    "type": "vbs_in_doc",
+    "severity": "high",
+    "file_size": 3687,
+    "entropy": 7.973862226963915,
+    "hidden_patterns": [
+      "VBS"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/jar_in_odt_0000.odt",
+    "label": 1,
+    "type": "jar_in_odt",
+    "severity": "critical",
+    "file_size": 2390,
+    "entropy": 7.278138358260229,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_odt_0001.odt",
+    "label": 1,
+    "type": "jar_in_odt",
+    "severity": "critical",
+    "file_size": 3519,
+    "entropy": 7.169164895440673,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_odt_0002.odt",
+    "label": 1,
+    "type": "jar_in_odt",
+    "severity": "critical",
+    "file_size": 5367,
+    "entropy": 6.82506417909393,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_odt_0003.odt",
+    "label": 1,
+    "type": "jar_in_odt",
+    "severity": "critical",
+    "file_size": 4089,
+    "entropy": 7.985465858412431,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_odt_0004.odt",
+    "label": 1,
+    "type": "jar_in_odt",
+    "severity": "critical",
+    "file_size": 4094,
+    "entropy": 6.842930581259806,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/elf_in_zip_0000.zip",
+    "label": 1,
+    "type": "elf_in_zip",
+    "severity": "critical",
+    "file_size": 4037,
+    "entropy": 7.158352846384982,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_zip_0001.zip",
+    "label": 1,
+    "type": "elf_in_zip",
+    "severity": "critical",
+    "file_size": 5028,
+    "entropy": 6.712578802417397,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_zip_0002.zip",
+    "label": 1,
+    "type": "elf_in_zip",
+    "severity": "critical",
+    "file_size": 4312,
+    "entropy": 6.986914452742277,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_zip_0003.zip",
+    "label": 1,
+    "type": "elf_in_zip",
+    "severity": "critical",
+    "file_size": 3346,
+    "entropy": 7.254605604690857,
+    "hidden_patterns": [
+      "ELF",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/elf_in_zip_0004.zip",
+    "label": 1,
+    "type": "elf_in_zip",
+    "severity": "critical",
+    "file_size": 2469,
+    "entropy": 7.04026156577164,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_rar_0000.rar",
+    "label": 1,
+    "type": "elf_in_rar",
+    "severity": "critical",
+    "file_size": 5397,
+    "entropy": 6.955345770842396,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_rar_0001.rar",
+    "label": 1,
+    "type": "elf_in_rar",
+    "severity": "critical",
+    "file_size": 5243,
+    "entropy": 7.969563701619688,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_rar_0002.rar",
+    "label": 1,
+    "type": "elf_in_rar",
+    "severity": "critical",
+    "file_size": 3616,
+    "entropy": 7.958295732549762,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_rar_0003.rar",
+    "label": 1,
+    "type": "elf_in_rar",
+    "severity": "critical",
+    "file_size": 5655,
+    "entropy": 5.885996259572283,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/elf_in_rar_0004.rar",
+    "label": 1,
+    "type": "elf_in_rar",
+    "severity": "critical",
+    "file_size": 3417,
+    "entropy": 6.057044173183355,
+    "hidden_patterns": [
+      "ELF"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_zip_0000.zip",
+    "label": 1,
+    "type": "exe_in_zip",
+    "severity": "critical",
+    "file_size": 4541,
+    "entropy": 7.279291001759286,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_zip_0001.zip",
+    "label": 1,
+    "type": "exe_in_zip",
+    "severity": "critical",
+    "file_size": 5068,
+    "entropy": 7.992644448831931,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_zip_0002.zip",
+    "label": 1,
+    "type": "exe_in_zip",
+    "severity": "critical",
+    "file_size": 3899,
+    "entropy": 6.29557826000944,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_zip_0003.zip",
+    "label": 1,
+    "type": "exe_in_zip",
+    "severity": "critical",
+    "file_size": 5774,
+    "entropy": 4.967830776905596,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_zip_0004.zip",
+    "label": 1,
+    "type": "exe_in_zip",
+    "severity": "critical",
+    "file_size": 3663,
+    "entropy": 7.9484156963256565,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_rar_0000.rar",
+    "label": 1,
+    "type": "exe_in_rar",
+    "severity": "critical",
+    "file_size": 5288,
+    "entropy": 6.554521116550367,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_rar_0001.rar",
+    "label": 1,
+    "type": "exe_in_rar",
+    "severity": "critical",
+    "file_size": 4818,
+    "entropy": 6.885488272152583,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_rar_0002.rar",
+    "label": 1,
+    "type": "exe_in_rar",
+    "severity": "critical",
+    "file_size": 1093,
+    "entropy": 7.831191995649555,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_rar_0003.rar",
+    "label": 1,
+    "type": "exe_in_rar",
+    "severity": "critical",
+    "file_size": 3561,
+    "entropy": 7.985460263122906,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_rar_0004.rar",
+    "label": 1,
+    "type": "exe_in_rar",
+    "severity": "critical",
+    "file_size": 2841,
+    "entropy": 7.954820557545826,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/jar_in_rar_0000.rar",
+    "label": 1,
+    "type": "jar_in_rar",
+    "severity": "high",
+    "file_size": 4707,
+    "entropy": 7.983607228966091,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_rar_0001.rar",
+    "label": 1,
+    "type": "jar_in_rar",
+    "severity": "high",
+    "file_size": 5013,
+    "entropy": 5.72619660225978,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_rar_0002.rar",
+    "label": 1,
+    "type": "jar_in_rar",
+    "severity": "high",
+    "file_size": 3784,
+    "entropy": 7.375711608894277,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_rar_0003.rar",
+    "label": 1,
+    "type": "jar_in_rar",
+    "severity": "high",
+    "file_size": 2587,
+    "entropy": 7.01634469351063,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_rar_0004.rar",
+    "label": 1,
+    "type": "jar_in_rar",
+    "severity": "high",
+    "file_size": 6642,
+    "entropy": 6.306262725323295,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/zip_in_rar_0000.rar",
+    "label": 1,
+    "type": "zip_in_rar",
+    "severity": "medium",
+    "file_size": 3037,
+    "entropy": 7.979634056029942,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_rar_0001.rar",
+    "label": 1,
+    "type": "zip_in_rar",
+    "severity": "medium",
+    "file_size": 4723,
+    "entropy": 7.978521112384064,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_rar_0002.rar",
+    "label": 1,
+    "type": "zip_in_rar",
+    "severity": "medium",
+    "file_size": 5310,
+    "entropy": 6.3752624223360606,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_rar_0003.rar",
+    "label": 1,
+    "type": "zip_in_rar",
+    "severity": "medium",
+    "file_size": 6560,
+    "entropy": 6.120605795746764,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_rar_0004.rar",
+    "label": 1,
+    "type": "zip_in_rar",
+    "severity": "medium",
+    "file_size": 2281,
+    "entropy": 7.273383060999224,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_zip_0000.zip",
+    "label": 1,
+    "type": "rar_in_zip",
+    "severity": "medium",
+    "file_size": 3401,
+    "entropy": 7.357646881696773,
+    "hidden_patterns": [
+      "JSP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_zip_0001.zip",
+    "label": 1,
+    "type": "rar_in_zip",
+    "severity": "medium",
+    "file_size": 5322,
+    "entropy": 7.964344613803276,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_zip_0002.zip",
+    "label": 1,
+    "type": "rar_in_zip",
+    "severity": "medium",
+    "file_size": 3412,
+    "entropy": 7.974511337737013,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_zip_0003.zip",
+    "label": 1,
+    "type": "rar_in_zip",
+    "severity": "medium",
+    "file_size": 3011,
+    "entropy": 7.971241483597305,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_zip_0004.zip",
+    "label": 1,
+    "type": "rar_in_zip",
+    "severity": "medium",
+    "file_size": 4909,
+    "entropy": 6.994357566133446,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_7z_0000.7z",
+    "label": 1,
+    "type": "zip_in_7z",
+    "severity": "medium",
+    "file_size": 6395,
+    "entropy": 6.588155848042325,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_7z_0001.7z",
+    "label": 1,
+    "type": "zip_in_7z",
+    "severity": "medium",
+    "file_size": 6617,
+    "entropy": 5.81176096662854,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_7z_0002.7z",
+    "label": 1,
+    "type": "zip_in_7z",
+    "severity": "medium",
+    "file_size": 3173,
+    "entropy": 7.197944479111188,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_7z_0003.7z",
+    "label": 1,
+    "type": "zip_in_7z",
+    "severity": "medium",
+    "file_size": 2366,
+    "entropy": 7.9238927076011585,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_7z_0004.7z",
+    "label": 1,
+    "type": "zip_in_7z",
+    "severity": "medium",
+    "file_size": 6319,
+    "entropy": 5.976518320805342,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_7z_0000.7z",
+    "label": 1,
+    "type": "rar_in_7z",
+    "severity": "medium",
+    "file_size": 2351,
+    "entropy": 7.973896454438917,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_7z_0001.7z",
+    "label": 1,
+    "type": "rar_in_7z",
+    "severity": "medium",
+    "file_size": 3769,
+    "entropy": 5.272928492582669,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_7z_0002.7z",
+    "label": 1,
+    "type": "rar_in_7z",
+    "severity": "medium",
+    "file_size": 4200,
+    "entropy": 5.4738063893787885,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_7z_0003.7z",
+    "label": 1,
+    "type": "rar_in_7z",
+    "severity": "medium",
+    "file_size": 2658,
+    "entropy": 7.022430636166431,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_7z_0004.7z",
+    "label": 1,
+    "type": "rar_in_7z",
+    "severity": "medium",
+    "file_size": 5313,
+    "entropy": 7.9672884753017845,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_mp4_0000.mp4",
+    "label": 1,
+    "type": "exe_in_mp4",
+    "severity": "critical",
+    "file_size": 4185,
+    "entropy": 7.955456570141166,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_mp4_0001.mp4",
+    "label": 1,
+    "type": "exe_in_mp4",
+    "severity": "critical",
+    "file_size": 3387,
+    "entropy": 6.70715484505085,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_mp4_0002.mp4",
+    "label": 1,
+    "type": "exe_in_mp4",
+    "severity": "critical",
+    "file_size": 2961,
+    "entropy": 4.375079675312399,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_mp4_0003.mp4",
+    "label": 1,
+    "type": "exe_in_mp4",
+    "severity": "critical",
+    "file_size": 5001,
+    "entropy": 7.982739233355362,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/exe_in_mp4_0004.mp4",
+    "label": 1,
+    "type": "exe_in_mp4",
+    "severity": "critical",
+    "file_size": 2106,
+    "entropy": 6.608138801582457,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/bat_in_mp4_0000.mp4",
+    "label": 1,
+    "type": "bat_in_mp4",
+    "severity": "high",
+    "file_size": 2593,
+    "entropy": 5.819973840198806,
+    "hidden_patterns": [
+      "BAT"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/bat_in_mp4_0001.mp4",
+    "label": 1,
+    "type": "bat_in_mp4",
+    "severity": "high",
+    "file_size": 2080,
+    "entropy": 7.9516732923394695,
+    "hidden_patterns": [
+      "BAT"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/bat_in_mp4_0002.mp4",
+    "label": 1,
+    "type": "bat_in_mp4",
+    "severity": "high",
+    "file_size": 1228,
+    "entropy": 7.9145322993994505,
+    "hidden_patterns": [
+      "BAT"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/bat_in_mp4_0003.mp4",
+    "label": 1,
+    "type": "bat_in_mp4",
+    "severity": "high",
+    "file_size": 2731,
+    "entropy": 7.416406423659172,
+    "hidden_patterns": [
+      "BAT"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/bat_in_mp4_0004.mp4",
+    "label": 1,
+    "type": "bat_in_mp4",
+    "severity": "high",
+    "file_size": 4171,
+    "entropy": 7.981652703355117,
+    "hidden_patterns": [
+      "BAT"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/jar_in_mp4_0000.mp4",
+    "label": 1,
+    "type": "jar_in_mp4",
+    "severity": "critical",
+    "file_size": 5169,
+    "entropy": 6.799686036975771,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_mp4_0001.mp4",
+    "label": 1,
+    "type": "jar_in_mp4",
+    "severity": "critical",
+    "file_size": 4584,
+    "entropy": 6.2953891831320075,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_mp4_0002.mp4",
+    "label": 1,
+    "type": "jar_in_mp4",
+    "severity": "critical",
+    "file_size": 6005,
+    "entropy": 6.226415094359435,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_mp4_0003.mp4",
+    "label": 1,
+    "type": "jar_in_mp4",
+    "severity": "critical",
+    "file_size": 3924,
+    "entropy": 7.974039006344066,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_mp4_0004.mp4",
+    "label": 1,
+    "type": "jar_in_mp4",
+    "severity": "critical",
+    "file_size": 2133,
+    "entropy": 7.070150641724769,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/zip_in_mp3_0000.mp3",
+    "label": 1,
+    "type": "zip_in_mp3",
+    "severity": "medium",
+    "file_size": 3835,
+    "entropy": 7.954091541976876,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_mp3_0001.mp3",
+    "label": 1,
+    "type": "zip_in_mp3",
+    "severity": "medium",
+    "file_size": 3393,
+    "entropy": 7.945405360094413,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_mp3_0002.mp3",
+    "label": 1,
+    "type": "zip_in_mp3",
+    "severity": "medium",
+    "file_size": 5797,
+    "entropy": 6.436696270718855,
+    "hidden_patterns": [
+      "ZIP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_mp3_0003.mp3",
+    "label": 1,
+    "type": "zip_in_mp3",
+    "severity": "medium",
+    "file_size": 6867,
+    "entropy": 6.333452043406735,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_mp3_0004.mp3",
+    "label": 1,
+    "type": "zip_in_mp3",
+    "severity": "medium",
+    "file_size": 3545,
+    "entropy": 5.825378512533344,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/png_in_mp3_0000.mp3",
+    "label": 1,
+    "type": "png_in_mp3",
+    "severity": "medium",
+    "file_size": 4336,
+    "entropy": 5.858947951796232,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/png_in_mp3_0001.mp3",
+    "label": 1,
+    "type": "png_in_mp3",
+    "severity": "medium",
+    "file_size": 3954,
+    "entropy": 4.973670691681809,
+    "hidden_patterns": [
+      "JSP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/png_in_mp3_0002.mp3",
+    "label": 1,
+    "type": "png_in_mp3",
+    "severity": "medium",
+    "file_size": 6025,
+    "entropy": 5.753743052840793,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/png_in_mp3_0003.mp3",
+    "label": 1,
+    "type": "png_in_mp3",
+    "severity": "medium",
+    "file_size": 4220,
+    "entropy": 7.95616782489148,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/png_in_mp3_0004.mp3",
+    "label": 1,
+    "type": "png_in_mp3",
+    "severity": "medium",
+    "file_size": 3182,
+    "entropy": 7.934973205555256,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_wav_0000.wav",
+    "label": 1,
+    "type": "zip_in_wav",
+    "severity": "medium",
+    "file_size": 4250,
+    "entropy": 7.986831503423861,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_wav_0001.wav",
+    "label": 1,
+    "type": "zip_in_wav",
+    "severity": "medium",
+    "file_size": 2225,
+    "entropy": 7.9085204975636625,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_wav_0002.wav",
+    "label": 1,
+    "type": "zip_in_wav",
+    "severity": "medium",
+    "file_size": 3770,
+    "entropy": 5.436620490393086,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_wav_0003.wav",
+    "label": 1,
+    "type": "zip_in_wav",
+    "severity": "medium",
+    "file_size": 5560,
+    "entropy": 7.966816487324284,
+    "hidden_patterns": [
+      "ZIP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/zip_in_wav_0004.wav",
+    "label": 1,
+    "type": "zip_in_wav",
+    "severity": "medium",
+    "file_size": 5424,
+    "entropy": 7.9855157932324,
+    "hidden_patterns": [
+      "ZIP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/zip_in_webm_0000.webm",
+    "label": 1,
+    "type": "zip_in_webm",
+    "severity": "medium",
+    "file_size": 3159,
+    "entropy": 7.933498185952699,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_webm_0001.webm",
+    "label": 1,
+    "type": "zip_in_webm",
+    "severity": "medium",
+    "file_size": 5975,
+    "entropy": 5.610755102781393,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_webm_0002.webm",
+    "label": 1,
+    "type": "zip_in_webm",
+    "severity": "medium",
+    "file_size": 4993,
+    "entropy": 6.8568952772571246,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_webm_0003.webm",
+    "label": 1,
+    "type": "zip_in_webm",
+    "severity": "medium",
+    "file_size": 3729,
+    "entropy": 7.947518126092277,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_webm_0004.webm",
+    "label": 1,
+    "type": "zip_in_webm",
+    "severity": "medium",
+    "file_size": 4414,
+    "entropy": 4.516276527835363,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_swf_0000.swf",
+    "label": 1,
+    "type": "zip_in_swf",
+    "severity": "high",
+    "file_size": 6278,
+    "entropy": 6.510481875160351,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_swf_0001.swf",
+    "label": 1,
+    "type": "zip_in_swf",
+    "severity": "high",
+    "file_size": 2384,
+    "entropy": 7.069751690051147,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_swf_0002.swf",
+    "label": 1,
+    "type": "zip_in_swf",
+    "severity": "high",
+    "file_size": 4029,
+    "entropy": 6.731552089669296,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_swf_0003.swf",
+    "label": 1,
+    "type": "zip_in_swf",
+    "severity": "high",
+    "file_size": 6262,
+    "entropy": 7.168054571690773,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_swf_0004.swf",
+    "label": 1,
+    "type": "zip_in_swf",
+    "severity": "high",
+    "file_size": 3440,
+    "entropy": 7.541938187697163,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_flac_0000.flac",
+    "label": 1,
+    "type": "pdf_in_flac",
+    "severity": "medium",
+    "file_size": 5500,
+    "entropy": 6.36018559814052,
+    "hidden_patterns": [
+      "JSP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_flac_0001.flac",
+    "label": 1,
+    "type": "pdf_in_flac",
+    "severity": "medium",
+    "file_size": 4607,
+    "entropy": 7.954129446689989,
+    "hidden_patterns": [
+      "JSP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_flac_0002.flac",
+    "label": 1,
+    "type": "pdf_in_flac",
+    "severity": "medium",
+    "file_size": 5294,
+    "entropy": 7.0805248615827034,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_flac_0003.flac",
+    "label": 1,
+    "type": "pdf_in_flac",
+    "severity": "medium",
+    "file_size": 5980,
+    "entropy": 7.986364653167579,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_flac_0004.flac",
+    "label": 1,
+    "type": "pdf_in_flac",
+    "severity": "medium",
+    "file_size": 6562,
+    "entropy": 7.037092213676191,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_ogg_0000.ogg",
+    "label": 1,
+    "type": "pdf_in_ogg",
+    "severity": "medium",
+    "file_size": 6748,
+    "entropy": 7.21474607339263,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_ogg_0001.ogg",
+    "label": 1,
+    "type": "pdf_in_ogg",
+    "severity": "medium",
+    "file_size": 4059,
+    "entropy": 7.955960211556101,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_ogg_0002.ogg",
+    "label": 1,
+    "type": "pdf_in_ogg",
+    "severity": "medium",
+    "file_size": 1955,
+    "entropy": 7.917443828741083,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_ogg_0003.ogg",
+    "label": 1,
+    "type": "pdf_in_ogg",
+    "severity": "medium",
+    "file_size": 4098,
+    "entropy": 5.253505193881459,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_ogg_0004.ogg",
+    "label": 1,
+    "type": "pdf_in_ogg",
+    "severity": "medium",
+    "file_size": 4557,
+    "entropy": 6.290231768115052,
+    "hidden_patterns": [
+      "JSP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/jar_in_jpg_0000.jpg",
+    "label": 1,
+    "type": "jar_in_jpg",
+    "severity": "critical",
+    "file_size": 2546,
+    "entropy": 7.986096873672897,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_jpg_0001.jpg",
+    "label": 1,
+    "type": "jar_in_jpg",
+    "severity": "critical",
+    "file_size": 3471,
+    "entropy": 7.950444926430709,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_jpg_0002.jpg",
+    "label": 1,
+    "type": "jar_in_jpg",
+    "severity": "critical",
+    "file_size": 1726,
+    "entropy": 6.325787921751699,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_jpg_0003.jpg",
+    "label": 1,
+    "type": "jar_in_jpg",
+    "severity": "critical",
+    "file_size": 4467,
+    "entropy": 7.982307541047127,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_jpg_0004.jpg",
+    "label": 1,
+    "type": "jar_in_jpg",
+    "severity": "critical",
+    "file_size": 3144,
+    "entropy": 7.548772428542369,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_png_0000.png",
+    "label": 1,
+    "type": "jar_in_png",
+    "severity": "critical",
+    "file_size": 5289,
+    "entropy": 6.750716939348756,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_png_0001.png",
+    "label": 1,
+    "type": "jar_in_png",
+    "severity": "critical",
+    "file_size": 6403,
+    "entropy": 7.169712061024735,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_png_0002.png",
+    "label": 1,
+    "type": "jar_in_png",
+    "severity": "critical",
+    "file_size": 3806,
+    "entropy": 6.247105627027029,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_png_0003.png",
+    "label": 1,
+    "type": "jar_in_png",
+    "severity": "critical",
+    "file_size": 2808,
+    "entropy": 7.931286328926429,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_png_0004.png",
+    "label": 1,
+    "type": "jar_in_png",
+    "severity": "critical",
+    "file_size": 3099,
+    "entropy": 7.307185349299546,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_gif_0000.gif",
+    "label": 1,
+    "type": "jar_in_gif",
+    "severity": "critical",
+    "file_size": 7304,
+    "entropy": 6.151439287764241,
+    "hidden_patterns": [
+      "PE",
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_gif_0001.gif",
+    "label": 1,
+    "type": "jar_in_gif",
+    "severity": "critical",
+    "file_size": 3557,
+    "entropy": 6.320562336835199,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_gif_0002.gif",
+    "label": 1,
+    "type": "jar_in_gif",
+    "severity": "critical",
+    "file_size": 6257,
+    "entropy": 7.993532026076806,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_gif_0003.gif",
+    "label": 1,
+    "type": "jar_in_gif",
+    "severity": "critical",
+    "file_size": 2295,
+    "entropy": 6.829940563186106,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_gif_0004.gif",
+    "label": 1,
+    "type": "jar_in_gif",
+    "severity": "critical",
+    "file_size": 2286,
+    "entropy": 7.954286149392567,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_tiff_0000.tiff",
+    "label": 1,
+    "type": "jar_in_tiff",
+    "severity": "critical",
+    "file_size": 4401,
+    "entropy": 7.975013506488085,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_tiff_0001.tiff",
+    "label": 1,
+    "type": "jar_in_tiff",
+    "severity": "critical",
+    "file_size": 5007,
+    "entropy": 7.993210834823056,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_tiff_0002.tiff",
+    "label": 1,
+    "type": "jar_in_tiff",
+    "severity": "critical",
+    "file_size": 2196,
+    "entropy": 7.921418030869128,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_tiff_0003.tiff",
+    "label": 1,
+    "type": "jar_in_tiff",
+    "severity": "critical",
+    "file_size": 4187,
+    "entropy": 6.807899838625924,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jar_in_tiff_0004.tiff",
+    "label": 1,
+    "type": "jar_in_tiff",
+    "severity": "critical",
+    "file_size": 6404,
+    "entropy": 7.987676319961215,
+    "hidden_patterns": [
+      "ZIP",
+      "JAR"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_jpg_0000.jpg",
+    "label": 1,
+    "type": "pdf_in_jpg",
+    "severity": "medium",
+    "file_size": 6171,
+    "entropy": 6.25228747113881,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_jpg_0001.jpg",
+    "label": 1,
+    "type": "pdf_in_jpg",
+    "severity": "medium",
+    "file_size": 2760,
+    "entropy": 6.614834195931352,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_jpg_0002.jpg",
+    "label": 1,
+    "type": "pdf_in_jpg",
+    "severity": "medium",
+    "file_size": 5962,
+    "entropy": 7.968499832924582,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_jpg_0003.jpg",
+    "label": 1,
+    "type": "pdf_in_jpg",
+    "severity": "medium",
+    "file_size": 1300,
+    "entropy": 7.833697271454206,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_jpg_0004.jpg",
+    "label": 1,
+    "type": "pdf_in_jpg",
+    "severity": "medium",
+    "file_size": 1971,
+    "entropy": 6.4775930015210355,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_gif_0000.gif",
+    "label": 1,
+    "type": "pdf_in_gif",
+    "severity": "medium",
+    "file_size": 4953,
+    "entropy": 5.137852339772159,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_gif_0001.gif",
+    "label": 1,
+    "type": "pdf_in_gif",
+    "severity": "medium",
+    "file_size": 6241,
+    "entropy": 7.971416361196858,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_gif_0002.gif",
+    "label": 1,
+    "type": "pdf_in_gif",
+    "severity": "medium",
+    "file_size": 2499,
+    "entropy": 7.48026955357916,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_gif_0003.gif",
+    "label": 1,
+    "type": "pdf_in_gif",
+    "severity": "medium",
+    "file_size": 3296,
+    "entropy": 5.571564044989476,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_gif_0004.gif",
+    "label": 1,
+    "type": "pdf_in_gif",
+    "severity": "medium",
+    "file_size": 2597,
+    "entropy": 7.971187274077269,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_tiff_0000.tiff",
+    "label": 1,
+    "type": "pdf_in_tiff",
+    "severity": "medium",
+    "file_size": 4047,
+    "entropy": 7.128028801824911,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_tiff_0001.tiff",
+    "label": 1,
+    "type": "pdf_in_tiff",
+    "severity": "medium",
+    "file_size": 1667,
+    "entropy": 5.635059906864077,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_tiff_0002.tiff",
+    "label": 1,
+    "type": "pdf_in_tiff",
+    "severity": "medium",
+    "file_size": 6011,
+    "entropy": 6.485315370121038,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_tiff_0003.tiff",
+    "label": 1,
+    "type": "pdf_in_tiff",
+    "severity": "medium",
+    "file_size": 6379,
+    "entropy": 7.990803733578555,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_in_tiff_0004.tiff",
+    "label": 1,
+    "type": "pdf_in_tiff",
+    "severity": "medium",
+    "file_size": 4723,
+    "entropy": 6.953293686837386,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_tiff_0000.tiff",
+    "label": 1,
+    "type": "rar_in_tiff",
+    "severity": "high",
+    "file_size": 5578,
+    "entropy": 6.475237448197587,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_tiff_0001.tiff",
+    "label": 1,
+    "type": "rar_in_tiff",
+    "severity": "high",
+    "file_size": 5859,
+    "entropy": 6.075004603470436,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_tiff_0002.tiff",
+    "label": 1,
+    "type": "rar_in_tiff",
+    "severity": "high",
+    "file_size": 5634,
+    "entropy": 6.678119527673832,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_tiff_0003.tiff",
+    "label": 1,
+    "type": "rar_in_tiff",
+    "severity": "high",
+    "file_size": 6340,
+    "entropy": 6.276368560132707,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/rar_in_tiff_0004.tiff",
+    "label": 1,
+    "type": "rar_in_tiff",
+    "severity": "high",
+    "file_size": 6977,
+    "entropy": 6.962216726256736,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_tiff_0000.tiff",
+    "label": 1,
+    "type": "zip_in_tiff",
+    "severity": "medium",
+    "file_size": 4850,
+    "entropy": 7.233917072453015,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_tiff_0001.tiff",
+    "label": 1,
+    "type": "zip_in_tiff",
+    "severity": "medium",
+    "file_size": 4067,
+    "entropy": 5.5961462767355705,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_tiff_0002.tiff",
+    "label": 1,
+    "type": "zip_in_tiff",
+    "severity": "medium",
+    "file_size": 3775,
+    "entropy": 7.983889860175136,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_tiff_0003.tiff",
+    "label": 1,
+    "type": "zip_in_tiff",
+    "severity": "medium",
+    "file_size": 2743,
+    "entropy": 5.9841421599024995,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_tiff_0004.tiff",
+    "label": 1,
+    "type": "zip_in_tiff",
+    "severity": "medium",
+    "file_size": 4976,
+    "entropy": 7.977907062544801,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/tar_in_tiff_0000.tiff",
+    "label": 1,
+    "type": "tar_in_tiff",
+    "severity": "medium",
+    "file_size": 2335,
+    "entropy": 5.855417224558802,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/tar_in_tiff_0001.tiff",
+    "label": 1,
+    "type": "tar_in_tiff",
+    "severity": "medium",
+    "file_size": 5278,
+    "entropy": 6.997625183839214,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/tar_in_tiff_0002.tiff",
+    "label": 1,
+    "type": "tar_in_tiff",
+    "severity": "medium",
+    "file_size": 3953,
+    "entropy": 7.952390088308588,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/tar_in_tiff_0003.tiff",
+    "label": 1,
+    "type": "tar_in_tiff",
+    "severity": "medium",
+    "file_size": 4383,
+    "entropy": 7.974028390638022,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/tar_in_tiff_0004.tiff",
+    "label": 1,
+    "type": "tar_in_tiff",
+    "severity": "medium",
+    "file_size": 3721,
+    "entropy": 5.462137729562754,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_gif_0000.gif",
+    "label": 1,
+    "type": "zip_in_gif",
+    "severity": "medium",
+    "file_size": 6447,
+    "entropy": 6.753503011234075,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_gif_0001.gif",
+    "label": 1,
+    "type": "zip_in_gif",
+    "severity": "medium",
+    "file_size": 3237,
+    "entropy": 7.062889636203253,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_gif_0002.gif",
+    "label": 1,
+    "type": "zip_in_gif",
+    "severity": "medium",
+    "file_size": 5491,
+    "entropy": 7.96496929001523,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_gif_0003.gif",
+    "label": 1,
+    "type": "zip_in_gif",
+    "severity": "medium",
+    "file_size": 2125,
+    "entropy": 6.902841607227881,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/zip_in_gif_0004.gif",
+    "label": 1,
+    "type": "zip_in_gif",
+    "severity": "medium",
+    "file_size": 5409,
+    "entropy": 5.594630980699852,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_jpg_0000.jpg",
+    "label": 1,
+    "type": "php_in_jpg",
+    "severity": "critical",
+    "file_size": 2748,
+    "entropy": 7.84754567569942,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_jpg_0001.jpg",
+    "label": 1,
+    "type": "php_in_jpg",
+    "severity": "critical",
+    "file_size": 2730,
+    "entropy": 7.672147654670978,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_jpg_0002.jpg",
+    "label": 1,
+    "type": "php_in_jpg",
+    "severity": "critical",
+    "file_size": 1792,
+    "entropy": 7.914574567524903,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_jpg_0003.jpg",
+    "label": 1,
+    "type": "php_in_jpg",
+    "severity": "critical",
+    "file_size": 2498,
+    "entropy": 7.782439805991868,
+    "hidden_patterns": [
+      "PHP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/php_in_jpg_0004.jpg",
+    "label": 1,
+    "type": "php_in_jpg",
+    "severity": "critical",
+    "file_size": 2072,
+    "entropy": 7.82469276005966,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_png_0000.png",
+    "label": 1,
+    "type": "php_in_png",
+    "severity": "critical",
+    "file_size": 1589,
+    "entropy": 7.406292381493288,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_png_0001.png",
+    "label": 1,
+    "type": "php_in_png",
+    "severity": "critical",
+    "file_size": 1089,
+    "entropy": 6.993518100152189,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_png_0002.png",
+    "label": 1,
+    "type": "php_in_png",
+    "severity": "critical",
+    "file_size": 1430,
+    "entropy": 7.247666529275756,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_png_0003.png",
+    "label": 1,
+    "type": "php_in_png",
+    "severity": "critical",
+    "file_size": 2673,
+    "entropy": 7.6746340194459055,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_png_0004.png",
+    "label": 1,
+    "type": "php_in_png",
+    "severity": "critical",
+    "file_size": 1195,
+    "entropy": 7.816884915013271,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_gif_0000.gif",
+    "label": 1,
+    "type": "php_in_gif",
+    "severity": "critical",
+    "file_size": 989,
+    "entropy": 7.27156800644066,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_gif_0001.gif",
+    "label": 1,
+    "type": "php_in_gif",
+    "severity": "critical",
+    "file_size": 1713,
+    "entropy": 7.880410934804107,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_gif_0002.gif",
+    "label": 1,
+    "type": "php_in_gif",
+    "severity": "critical",
+    "file_size": 1437,
+    "entropy": 7.151881269937332,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_gif_0003.gif",
+    "label": 1,
+    "type": "php_in_gif",
+    "severity": "critical",
+    "file_size": 3230,
+    "entropy": 7.853033131444986,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/php_in_gif_0004.gif",
+    "label": 1,
+    "type": "php_in_gif",
+    "severity": "critical",
+    "file_size": 3297,
+    "entropy": 7.945339016999792,
+    "hidden_patterns": [
+      "PHP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/asp_in_jpg_0000.jpg",
+    "label": 1,
+    "type": "asp_in_jpg",
+    "severity": "critical",
+    "file_size": 1900,
+    "entropy": 7.6994145067505375,
+    "hidden_patterns": [
+      "ASP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/asp_in_jpg_0001.jpg",
+    "label": 1,
+    "type": "asp_in_jpg",
+    "severity": "critical",
+    "file_size": 3089,
+    "entropy": 7.824535353662495,
+    "hidden_patterns": [
+      "ASP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/asp_in_jpg_0002.jpg",
+    "label": 1,
+    "type": "asp_in_jpg",
+    "severity": "critical",
+    "file_size": 3207,
+    "entropy": 7.7778880458765425,
+    "hidden_patterns": [
+      "ASP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/asp_in_jpg_0003.jpg",
+    "label": 1,
+    "type": "asp_in_jpg",
+    "severity": "critical",
+    "file_size": 3224,
+    "entropy": 7.947822801754486,
+    "hidden_patterns": [
+      "ASP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/asp_in_jpg_0004.jpg",
+    "label": 1,
+    "type": "asp_in_jpg",
+    "severity": "critical",
+    "file_size": 3088,
+    "entropy": 7.8850841689949585,
+    "hidden_patterns": [
+      "ASP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jsp_in_png_0000.png",
+    "label": 1,
+    "type": "jsp_in_png",
+    "severity": "critical",
+    "file_size": 609,
+    "entropy": 6.786045538298627,
+    "hidden_patterns": [
+      "ASP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jsp_in_png_0001.png",
+    "label": 1,
+    "type": "jsp_in_png",
+    "severity": "critical",
+    "file_size": 2314,
+    "entropy": 7.495715426730891,
+    "hidden_patterns": [
+      "ASP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jsp_in_png_0002.png",
+    "label": 1,
+    "type": "jsp_in_png",
+    "severity": "critical",
+    "file_size": 1231,
+    "entropy": 7.802908688614859,
+    "hidden_patterns": [
+      "ASP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jsp_in_png_0003.png",
+    "label": 1,
+    "type": "jsp_in_png",
+    "severity": "critical",
+    "file_size": 2638,
+    "entropy": 7.821057708567823,
+    "hidden_patterns": [
+      "ZIP",
+      "ASP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/jsp_in_png_0004.png",
+    "label": 1,
+    "type": "jsp_in_png",
+    "severity": "critical",
+    "file_size": 548,
+    "entropy": 7.464018922668066,
+    "hidden_patterns": [
+      "ASP",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/packed_pe_upx_0000.exe",
+    "label": 1,
+    "type": "packed_pe_upx",
+    "severity": "high",
+    "file_size": 3217,
+    "entropy": 3.820621644748867,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/packed_pe_upx_0001.exe",
+    "label": 1,
+    "type": "packed_pe_upx",
+    "severity": "high",
+    "file_size": 4681,
+    "entropy": 7.66731155561011,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/packed_pe_upx_0002.exe",
+    "label": 1,
+    "type": "packed_pe_upx",
+    "severity": "high",
+    "file_size": 1467,
+    "entropy": 3.6076017666017326,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/packed_pe_upx_0003.exe",
+    "label": 1,
+    "type": "packed_pe_upx",
+    "severity": "high",
+    "file_size": 3676,
+    "entropy": 3.8285511837404096,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/packed_pe_upx_0004.exe",
+    "label": 1,
+    "type": "packed_pe_upx",
+    "severity": "high",
+    "file_size": 5601,
+    "entropy": 7.737585855069006,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/packed_pe_aspack_0000.exe",
+    "label": 1,
+    "type": "packed_pe_aspack",
+    "severity": "high",
+    "file_size": 3623,
+    "entropy": 4.529420686315271,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/packed_pe_aspack_0001.exe",
+    "label": 1,
+    "type": "packed_pe_aspack",
+    "severity": "high",
+    "file_size": 3257,
+    "entropy": 7.575410220410918,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/packed_pe_aspack_0002.exe",
+    "label": 1,
+    "type": "packed_pe_aspack",
+    "severity": "high",
+    "file_size": 6463,
+    "entropy": 3.8175710766033597,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/packed_pe_aspack_0003.exe",
+    "label": 1,
+    "type": "packed_pe_aspack",
+    "severity": "high",
+    "file_size": 2839,
+    "entropy": 7.431103657798946,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/packed_pe_aspack_0004.exe",
+    "label": 1,
+    "type": "packed_pe_aspack",
+    "severity": "high",
+    "file_size": 3894,
+    "entropy": 3.823608559198947,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/fud_cryptor_0000.exe",
+    "label": 1,
+    "type": "fud_cryptor",
+    "severity": "critical",
+    "file_size": 1822,
+    "entropy": 6.4131007815863175,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/fud_cryptor_0001.exe",
+    "label": 1,
+    "type": "fud_cryptor",
+    "severity": "critical",
+    "file_size": 1739,
+    "entropy": 6.414802951316352,
+    "hidden_patterns": [
+      "ZIP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/fud_cryptor_0002.exe",
+    "label": 1,
+    "type": "fud_cryptor",
+    "severity": "critical",
+    "file_size": 1468,
+    "entropy": 6.41297572311532,
+    "hidden_patterns": [
+      "PE",
+      "JSP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/malware/fud_cryptor_0003.exe",
+    "label": 1,
+    "type": "fud_cryptor",
+    "severity": "critical",
+    "file_size": 498,
+    "entropy": 6.276985596244161,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/fud_cryptor_0004.exe",
+    "label": 1,
+    "type": "fud_cryptor",
+    "severity": "critical",
+    "file_size": 786,
+    "entropy": 6.333632775718808,
+    "hidden_patterns": [
+      "JSP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_gitbundle_0000.pdf",
+    "label": 1,
+    "type": "pdf_gitbundle",
+    "severity": "medium",
+    "file_size": 6427,
+    "entropy": 5.613201201015771,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_gitbundle_0001.pdf",
+    "label": 1,
+    "type": "pdf_gitbundle",
+    "severity": "medium",
+    "file_size": 4916,
+    "entropy": 7.9844672085611945,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_gitbundle_0002.pdf",
+    "label": 1,
+    "type": "pdf_gitbundle",
+    "severity": "medium",
+    "file_size": 5220,
+    "entropy": 5.260856931254287,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_gitbundle_0003.pdf",
+    "label": 1,
+    "type": "pdf_gitbundle",
+    "severity": "medium",
+    "file_size": 3661,
+    "entropy": 7.939024731848416,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/pdf_gitbundle_0004.pdf",
+    "label": 1,
+    "type": "pdf_gitbundle",
+    "severity": "medium",
+    "file_size": 5604,
+    "entropy": 4.820953942898642,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/nes_in_zip_0000.zip",
+    "label": 1,
+    "type": "nes_in_zip",
+    "severity": "low",
+    "file_size": 3241,
+    "entropy": 5.789820928599158,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/nes_in_zip_0001.zip",
+    "label": 1,
+    "type": "nes_in_zip",
+    "severity": "low",
+    "file_size": 2228,
+    "entropy": 7.914998225005614,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/nes_in_zip_0002.zip",
+    "label": 1,
+    "type": "nes_in_zip",
+    "severity": "low",
+    "file_size": 3258,
+    "entropy": 7.942313326589394,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/nes_in_zip_0003.zip",
+    "label": 1,
+    "type": "nes_in_zip",
+    "severity": "low",
+    "file_size": 5633,
+    "entropy": 5.47934003989663,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/nes_in_zip_0004.zip",
+    "label": 1,
+    "type": "nes_in_zip",
+    "severity": "low",
+    "file_size": 4926,
+    "entropy": 7.9858195074354485,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/mbr_in_pdf_0000.pdf",
+    "label": 1,
+    "type": "mbr_in_pdf",
+    "severity": "high",
+    "file_size": 4052,
+    "entropy": 7.537829995868019,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/mbr_in_pdf_0001.pdf",
+    "label": 1,
+    "type": "mbr_in_pdf",
+    "severity": "high",
+    "file_size": 2914,
+    "entropy": 5.496677656510987,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/mbr_in_pdf_0002.pdf",
+    "label": 1,
+    "type": "mbr_in_pdf",
+    "severity": "high",
+    "file_size": 2150,
+    "entropy": 7.888503813037387,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/mbr_in_pdf_0003.pdf",
+    "label": 1,
+    "type": "mbr_in_pdf",
+    "severity": "high",
+    "file_size": 6094,
+    "entropy": 5.420522425864168,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/malware/mbr_in_pdf_0004.pdf",
+    "label": 1,
+    "type": "mbr_in_pdf",
+    "severity": "high",
+    "file_size": 6881,
+    "entropy": 7.976081792969882,
+    "hidden_patterns": [
+      "PE",
+      "ZIP"
+    ],
+    "has_dual_header": true
+  },
+  {
+    "filepath": "training_data/benign/clean_jpg_0000.jpg",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 1809,
+    "entropy": 7.882572265284354,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_png_0000.png",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 2604,
+    "entropy": 7.9262063644803895,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_gif_0000.gif",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 1080,
+    "entropy": 7.815979917422575,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_pdf_0000.pdf",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 1173,
+    "entropy": 7.797801393628687,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_zip_0000.zip",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 1502,
+    "entropy": 7.860728009073437,
+    "hidden_patterns": [
+      "PE"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_html_0000.html",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 900,
+    "entropy": 3.7405430847586048,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_text_0000.txt",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 1593,
+    "entropy": 3.8055359115586826,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_mp4_0000.mp4",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 2778,
+    "entropy": 7.938242175487125,
+    "hidden_patterns": [
+      "ZIP"
+    ],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_mp3_0000.mp3",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 2193,
+    "entropy": 7.906952335722234,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_doc_0000.doc",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 1846,
+    "entropy": 7.896517118078247,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_pe_0000.exe",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 7075,
+    "entropy": 7.8742455851459106,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_elf_0000.elf",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 3122,
+    "entropy": 7.90523915713632,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_bmp_0000.bmp",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 401,
+    "entropy": 7.393180768576359,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_tiff_0000.tiff",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 1808,
+    "entropy": 7.899512888908237,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  },
+  {
+    "filepath": "training_data/benign/clean_wav_0000.wav",
+    "label": 0,
+    "type": "clean",
+    "severity": "safe",
+    "file_size": 2595,
+    "entropy": 7.92039181778831,
+    "hidden_patterns": [],
+    "has_dual_header": false
+  }
+]
