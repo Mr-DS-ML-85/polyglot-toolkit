@@ -1,0 +1,55 @@
+#!/bin/bash
+# Polyglot Toolkit — Launcher Script
+# Usage: ./polyglot [gui|tui|build|scan|sanitize|monitor|help]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV="$SCRIPT_DIR/.venv"
+
+# Auto-setup venv if missing
+if [ ! -d "$VENV" ]; then
+    echo "Setting up environment..."
+    uv venv --python 3.14 "$VENV" 2>/dev/null || python3.14 -m venv "$VENV"
+    "$VENV/bin/pip" install PyQt6 rich 2>/dev/null || uv pip install PyQt6 rich --python "$VENV/bin/python"
+fi
+
+PYTHON="$VENV/bin/python"
+
+case "${1:-tui}" in
+    gui)
+        shift
+        exec "$PYTHON" "$SCRIPT_DIR/polyglot_app.py" "$@"
+        ;;
+    tui)
+        shift
+        exec "$PYTHON" "$SCRIPT_DIR/polyglot_tui.py" "$@"
+        ;;
+    build|scan|sanitize|monitor)
+        CMD="$1"; shift
+        exec "$PYTHON" "$SCRIPT_DIR/polyglot_tui.py" "$CMD" "$@"
+        ;;
+    help|--help|-h)
+        echo "Polyglot Toolkit v2.0 — Red Team Edition"
+        echo ""
+        echo "Usage:"
+        echo "  ./polyglot gui                          Launch PyQt6 GUI"
+        echo "  ./polyglot tui                          Interactive TUI menu"
+        echo "  ./polyglot build <cover> <payload>      Build polyglot file"
+        echo "  ./polyglot scan <file_or_dir>           Scan for hidden payloads"
+        echo "  ./polyglot sanitize <file_or_dir>       Strip hidden data"
+        echo "  ./polyglot monitor <dir>                Real-time directory monitor"
+        echo ""
+        echo "Build options:"
+        echo "  --type <jpeg|png|gif|pdf|zip|mp4>       Container type (default: jpeg)"
+        echo "  --encrypt                                XOR encrypt payload"
+        echo "  --fud                                    FUD cryptor obfuscation"
+        echo "  --mime                                   MIME-type confusion"
+        echo "  --output <path>                          Custom output path"
+        echo ""
+        echo "Author: Mr-DS-ML-85"
+        ;;
+    *)
+        echo "Unknown command: $1"
+        echo "Run: ./polyglot help"
+        exit 1
+        ;;
+esac

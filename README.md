@@ -4,61 +4,71 @@ Red team security toolkit for building, detecting, and sanitizing polyglot files
 
 ## Features
 
-### ◆ Builder
-Create polyglot files with hidden payloads in:
-- **JPEG** — payload after EOI marker
-- **PNG** — payload after IEND chunk
-- **GIF** — payload after terminator
-- **PDF** — payload after %%EOF
-- **ZIP** — payload before central directory
-
-Optional XOR encryption for payload obfuscation.
+### ◆ Builder — Attack Vectors
+- **Standard Polyglot** — payload hidden after file end markers (JPEG, PNG, GIF, PDF, ZIP, MP4)
+- **FUD Cryptor** — multi-layer obfuscation (XOR + zlib + b85 encoding) to evade AV detection
+- **MIME-Type Confusion** — prepend fake headers to disguise payload type
+- **Covert Archive Embedding** — embed payloads inside ZIP/archive structures
+- **XOR Encryption** — optional payload encryption with random 32-byte key
+- **EXE→Image wrapping** — hide executables inside image files
+- **Script→Media disguise** — BAT→MP4, VBS→JPG script-to-media conversion
+- **Icon manipulation** — replace EXE icons with cover file icons
 
 ### ⚠ Detector
-Scan files for:
-- Extension vs content type mismatches
-- Hidden PE/ELF/script signatures after end markers
-- Trailing data after file format end markers
-- High entropy sections (encrypted/compressed payloads)
-- Duplicate end markers (multiple polyglot payloads)
-- Malicious patterns (PowerShell, cmd.exe, scripts)
-
-Supports single file and recursive directory scanning.
+- Extension vs content-type mismatch detection
+- Hidden PE/ELF/script signature scanning
+- Trailing data detection after file end markers
+- Entropy analysis (8-section) for encrypted/compressed payloads
+- MIME confusion attack detection
+- Recursive directory scanning
 
 ### 🛡 Sanitizer
-Strip hidden payloads by:
-- Removing trailing data after JPEG EOI
-- Removing data after PNG IEND
-- Removing data after GIF terminator (0x3B)
-- Removing data after PDF %%EOF
-- Trimming ZIP to end of central directory + comment
-
-Automatic `.bak` backup creation before cleaning.
+- Strip hidden data after JPEG EOI, PNG IEND, GIF terminator, PDF %%EOF
+- ZIP trimming to end of central directory
+- Automatic `.bak` backup creation
 
 ### ▶ Real-Time Monitor
-- Watches directories for new/modified files
-- Automatic polyglot detection on file changes
-- Desktop notifications for threats (notify-send)
-- Alert sound on critical findings
-- Live threat feed in the GUI
+- Directory watching for new/modified files
+- Desktop notifications (Linux/macOS/Windows)
+- Alert sounds on threat detection
 
-### 📋 Dashboard
-- Live stats: files scanned, threats found, files sanitized
-- Recent alerts feed
-- Quick scan/sanitize buttons
+## Quick Start
+
+```bash
+# Interactive TUI (terminal)
+./polyglot
+
+# PyQt6 GUI
+./polyglot gui
+
+# Direct CLI commands
+./polyglot build cover.jpg payload.exe --type jpeg --encrypt
+./polyglot scan ~/Downloads
+./polyglot sanitize suspicious_image.jpg
+./polyglot monitor ~/Downloads
+
+# Help
+./polyglot help
+```
 
 ## Requirements
 
-- Python 3.6+
-- tkinter (usually pre-installed on Linux)
-- `notify-send` for desktop notifications (optional)
-- No external pip packages needed
+- Python 3.10+ (tested on 3.14)
+- UV package manager (auto-installs deps)
+- PyQt6 (for GUI — auto-installed by launcher)
+- rich (for TUI — auto-installed by launcher)
+- `notify-send` on Linux, `osascript` on macOS, PowerShell on Windows
 
-## Usage
+## Project Structure
 
-```bash
-# GUI Application (all-in-one)
-python3 polyglot_app.py
+```
+polyglot-toolkit/
+├── polyglot           # Launcher script (./polyglot gui|tui|build|scan|sanitize|monitor)
+├── polyglot_app.py    # PyQt6 GUI application
+├── polyglot_tui.py    # TUI + CLI application
+├── README.md
+├── LICENSE
+└── .venv/             # UV-managed virtual environment
 ```
 
 ## Defense Strategies
@@ -66,7 +76,7 @@ python3 polyglot_app.py
 1. **Scan before opening** — Use the Detector to check any suspicious file
 2. **Sanitize received images** — Run the Sanitizer on downloaded files
 3. **Monitor download folders** — Use the Real-Time Monitor on ~/Downloads
-4. **Check file signatures** — Content-type vs extension mismatch is a red flag
+4. **Check file signatures** — Content-type vs extension mismatch = red flag
 5. **Audit with YARA** — Complement with YARA rules for known polyglot patterns
 6. **Sandbox execution** — Never run untrusted binaries directly
 
