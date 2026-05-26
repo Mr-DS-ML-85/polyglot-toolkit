@@ -1,153 +1,79 @@
-# Polyglot Toolkit
+# Polyglot Toolkit — Red Team Edition
 
-**Educational tools for understanding, detecting, and defending against polyglot file attacks.**
+Red team security toolkit for building, detecting, and sanitizing polyglot files — valid documents that secretly contain hidden payloads.
 
-A **polyglot file** is a file that is simultaneously valid as two different formats. For example, a file that is both a valid JPEG image AND contains a hidden executable payload after the JPEG end-of-image marker.
+## Features
 
-This toolkit provides three tools for working with polyglot files:
+### ◆ Builder
+Create polyglot files with hidden payloads in:
+- **JPEG** — payload after EOI marker
+- **PNG** — payload after IEND chunk
+- **GIF** — payload after terminator
+- **PDF** — payload after %%EOF
+- **ZIP** — payload before central directory
 
-## 📦 Tools
+Optional XOR encryption for payload obfuscation.
 
-### 1. Polyglot Builder (`builder/`)
+### ⚠ Detector
+Scan files for:
+- Extension vs content type mismatches
+- Hidden PE/ELF/script signatures after end markers
+- Trailing data after file format end markers
+- High entropy sections (encrypted/compressed payloads)
+- Duplicate end markers (multiple polyglot payloads)
+- Malicious patterns (PowerShell, cmd.exe, scripts)
 
-Constructs polyglot files by appending payload data after a cover file's format-specific end markers. For **educational and authorized penetration testing** purposes only.
+Supports single file and recursive directory scanning.
 
-```bash
-# Build a JPEG polyglot with an embedded script
-python3 builder/polyglot_builder.py cover.jpg payload.exe -o polyglot.jpg -v
+### 🛡 Sanitizer
+Strip hidden payloads by:
+- Removing trailing data after JPEG EOI
+- Removing data after PNG IEND
+- Removing data after GIF terminator (0x3B)
+- Removing data after PDF %%EOF
+- Trimming ZIP to end of central directory + comment
 
-# List supported cover formats
-python3 builder/polyglot_builder.py --list-formats
-```
+Automatic `.bak` backup creation before cleaning.
 
-**Supported cover formats:**
-- JPEG — payload after EOI marker (FF D9)
-- PNG — payload after IEND chunk
-- GIF — payload after GIF trailer (3B)
-- PDF — payload after %%EOF marker
-- ZIP — payload after End of Central Directory
-- BMP — payload after pixel data
+### ▶ Real-Time Monitor
+- Watches directories for new/modified files
+- Automatic polyglot detection on file changes
+- Desktop notifications for threats (notify-send)
+- Alert sound on critical findings
+- Live threat feed in the GUI
 
-### 2. Polyglot Detector (`detector/`)
+### 📋 Dashboard
+- Live stats: files scanned, threats found, files sanitized
+- Recent alerts feed
+- Quick scan/sanitize buttons
 
-Scans files for polyglot indicators without modifying them. Detects:
-- Data after format end markers
-- Embedded executable headers (MZ, ELF, Mach-O)
-- Suspicious script patterns (PowerShell, VBScript, JavaScript)
-- High-entropy payloads (encrypted/packed data)
-- Double extensions and null byte injection
-- Format mismatches (extension vs content)
+## Requirements
 
-```bash
-# Scan a single file
-python3 detector/polyglot_detector.py suspicious.jpg -v
+- Python 3.6+
+- tkinter (usually pre-installed on Linux)
+- `notify-send` for desktop notifications (optional)
+- No external pip packages needed
 
-# Scan a directory recursively
-python3 detector/polyglot_detector.py ~/Downloads -r -v
-
-# Quiet mode — only CRITICAL and HIGH findings
-python3 detector/polyglot_detector.py /tmp/files -r -q
-
-# JSON output for integration with other tools
-python3 detector/polyglot_detector.py files/ -r --json
-```
-
-**Exit codes:**
-- `0` — all files clean
-- `1` — HIGH severity findings
-- `2` — CRITICAL severity findings
-
-### 3. Polyglot Sanitizer (`sanitizer/`)
-
-Strips hidden payloads from files by removing data after format end markers. Creates `.bak` backups by default.
+## Usage
 
 ```bash
-# Sanitize a file (creates .bak backup)
-python3 sanitizer/polyglot_sanitizer.py suspicious.jpg -v
-
-# Sanitize without backup
-python3 sanitizer/polyglot_sanitizer.py file.jpg --no-backup
-
-# Dry run — see what would be removed
-python3 sanitizer/polyglot_sanitizer.py files/ -r -n
-
-# Output to a different directory
-python3 sanitizer/polyglot_sanitizer.py files/ -r -o cleaned/
+# GUI Application (all-in-one)
+python3 polyglot_app.py
 ```
 
-## 🔬 How Polyglot Attacks Work
+## Defense Strategies
 
-### The Technique
+1. **Scan before opening** — Use the Detector to check any suspicious file
+2. **Sanitize received images** — Run the Sanitizer on downloaded files
+3. **Monitor download folders** — Use the Real-Time Monitor on ~/Downloads
+4. **Check file signatures** — Content-type vs extension mismatch is a red flag
+5. **Audit with YARA** — Complement with YARA rules for known polyglot patterns
+6. **Sandbox execution** — Never run untrusted binaries directly
 
-1. **Cover file** — A legitimate file (JPEG, PNG, PDF, MP4) that renders normally
-2. **Payload** — An executable, script, or other malicious content
-3. **Injection** — The payload is appended after the cover file's natural end marker
+## Author
 
-```
-[Valid JPEG data] [FF D9 end marker] [Hidden EXE payload]
-                  ^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^^^^
-                  Image displays      Runs when triggered
-                  normally here       (right-click, social eng)
-```
+Mr-DS-ML-85
 
-### Why It Works
+## License
 
-- **JPEG viewers** stop reading at `FF D9` — they never see the payload
-- **Windows Explorer** may show the file as an image (icon/thumbnail)
-- **Antivirus** may only scan up to the end marker
-- **File size** looks normal for a high-res image
-
-### Common Cover Formats
-
-| Format | End Marker | Technique |
-|--------|-----------|-----------|
-| JPEG | FF D9 | Payload after EOI |
-| PNG | IEND chunk | Payload after IEND |
-| GIF | 3B | Payload after trailer |
-| PDF | %%EOF | Payload after EOF |
-| ZIP | EOCD | Payload after Central Dir |
-
-## 🛡️ Defense Strategies
-
-### For Users
-1. **Don't trust file extensions** — Use the detector to verify suspicious files
-2. **Check file properties** — Right-click → Properties → look for unusual size
-3. **Scan before opening** — Use the detector on downloaded files
-4. **Sanitize received files** — Run the sanitizer on files from untrusted sources
-
-### For Organizations
-1. **Email gateway scanning** — Integrate the detector into mail servers
-2. **File upload filters** — Check uploads for polyglot indicators
-3. **Endpoint protection** — Deploy the sanitizer as a file processing step
-4. **Security awareness** — Train staff on polyglot file risks
-
-### Detection Integration
-
-```python
-from detector.polyglot_detector import scan_file
-
-# In your file processing pipeline
-detections = scan_file(filepath)
-for det in detections:
-    if det.severity in ('CRITICAL', 'HIGH'):
-        quarantine(filepath)
-        alert_security_team(det)
-```
-
-## ⚠️ Legal Disclaimer
-
-This toolkit is provided for **educational purposes** and **authorized security testing** only.
-
-- Only use the builder on systems you own or have explicit written authorization to test
-- Unauthorized use of polyglot techniques may violate computer fraud laws
-- The detector and sanitizer are defensive tools with no restrictions
-- By using this toolkit, you agree to comply with all applicable laws
-
-## 📋 Requirements
-
-- Python 3.8+
-- No external dependencies (stdlib only)
-
-## 📄 License
-
-MIT License — See [LICENSE](LICENSE) for details.
+MIT
