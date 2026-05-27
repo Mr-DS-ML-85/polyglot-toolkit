@@ -991,7 +991,11 @@ class PolyglotApp(QMainWindow):
                                        self.b_enc.isChecked(), self.b_fud.isChecked(), self.b_mime.isChecked(),
                                        payload_type=payload_type, target_os=target_os,
                                        arch=arch, stealth=self.b_stealth.isChecked())
-            for k,v in stats.items(): append_log(self.b_log, f"  {k}: {v}", T.GREEN)
+            for k,v in stats.items():
+                if k == 'warnings': continue
+                append_log(self.b_log, f"  {k}: {v}", T.GREEN)
+            for w in stats.get('warnings', []):
+                append_log(self.b_log, f"  ⚠ {w}", '#FFA500')
             self.counts['built'] += 1; self.d_built._val.setText(str(self.counts['built']))
             self._log(f"Polyglot built: {output}","success")
             Notifier.send("Polyglot Built",f"{ct} polyglot created")
