@@ -583,7 +583,31 @@ class PolyglotApp(QMainWindow):
         v = QLabel("  v3.0 — Mr-DS-ML-85"); v.setStyleSheet(f"color:{T.DIM};font-size:10px;padding:10px;border:none;"); sl.addWidget(v)
         ml.addWidget(sb)
 
-        # Stack
+        # Stack — 19 panels matching nav order
+        self.stack = QStackedWidget()
+        pages = [
+            self._pg_dashboard(),      # 0
+            self._pg_builder(),        # 1
+            self._pg_scanner(),        # 2
+            self._pg_monitor(),        # 3
+            self._pg_training(),       # 4
+            self._pg_quarantine(),     # 5
+            self._pg_yara(),           # 6
+            self._pg_logs(),           # 7 Activity Log
+            self._pg_settings(),       # 8
+            self._pg_report(),         # 9
+            self._pg_recover_bak(),    # 10
+            self._pg_server(),         # 11
+            self._pg_deep_analysis(),  # 12
+            self._pg_monitoring_panel(), # 13
+            self._pg_investigation(),  # 14
+            self._pg_benchmark(),      # 15
+            self._pg_network_tools(),  # 16
+            self._pg_hex_editor(),     # 17
+            self._pg_blue_side(),      # 18
+        ]
+        for pg in pages:
+            self.stack.addWidget(pg)
 
         # Global file selector bar — visible on all panels
         content_widget = QWidget()

@@ -33,37 +33,29 @@ class HexRegion:
 class HexEditor:
     """Hex viewer with polyglot-aware red-mark highlighting."""
 
-    # Format markers and their expected ranges
+    # Format markers — minimum 4 bytes to avoid false positives on random binary data
+    # Short sigs like BM(2), \x00\x00\x00(3), ID3(3), MZ(2) removed — too many false positives
     FORMAT_MARKERS = {
         b"\xff\xd8\xff": {"name": "JPEG", "end_markers": [b"\xff\xd9"], "color": "green"},
         b"\x89PNG\r\n\x1a\n": {"name": "PNG", "end_markers": [b"IEND"], "color": "green"},
         b"GIF87a": {"name": "GIF87a", "end_markers": [b"\x3b"], "color": "green"},
         b"GIF89a": {"name": "GIF89a", "end_markers": [b"\x3b"], "color": "green"},
-        b"BM": {"name": "BMP", "end_markers": [], "color": "green"},
-        b"RIFF": {"name": "RIFF", "end_markers": [], "color": "green"},
+        b"RIFF": {"name": "RIFF/WEBP/AVI/WAV", "end_markers": [], "color": "green"},
         b"\x00\x00\x01\x00": {"name": "ICO", "end_markers": [], "color": "green"},
         b"II\x2a\x00": {"name": "TIFF_LE", "end_markers": [], "color": "green"},
         b"MM\x00\x2a": {"name": "TIFF_BE", "end_markers": [], "color": "green"},
-        b"RIFF": {"name": "WEBP/AVI/WAV", "end_markers": [], "color": "green"},
         b"\x1a\x45\xdf\xa3": {"name": "MKV/WebM/EBML", "end_markers": [], "color": "green"},
-        b"\x00\x00\x00": {"name": "MP4/MOV (ftyp)", "end_markers": [], "color": "green"},
-        b"ID3": {"name": "MP3 (ID3)", "end_markers": [], "color": "green"},
-        b"\xff\xfb": {"name": "MP3 (sync)", "end_markers": [], "color": "green"},
-        b"\xff\xf3": {"name": "MP3 (sync)", "end_markers": [], "color": "green"},
+        b"ftyp": {"name": "MP4/MOV (ftyp)", "end_markers": [], "color": "green"},
         b"fLaC": {"name": "FLAC", "end_markers": [], "color": "green"},
         b"OggS": {"name": "OGG", "end_markers": [], "color": "green"},
         b"%PDF": {"name": "PDF", "end_markers": [b"%%EOF"], "color": "green"},
         b"PK\x03\x04": {"name": "ZIP/DOCX/XLSX/JAR", "end_markers": [b"PK\x05\x06"], "color": "green"},
         b"Rar!\x1a\x07": {"name": "RAR", "end_markers": [], "color": "green"},
         b"7z\xbc\xaf\x27\x1c": {"name": "7Z", "end_markers": [], "color": "green"},
-        b"\x1f\x8b": {"name": "GZIP", "end_markers": [], "color": "green"},
-        b"MZ": {"name": "PE/EXE", "end_markers": [], "color": "cyan"},
         b"\x7fELF": {"name": "ELF", "end_markers": [], "color": "cyan"},
         b"\xca\xfe\xba\xbe": {"name": "Mach-O/Fat", "end_markers": [], "color": "cyan"},
-        b"#!": {"name": "Script (shebang)", "end_markers": [], "color": "cyan"},
         b"<?xml": {"name": "XML", "end_markers": [], "color": "cyan"},
         b"<html": {"name": "HTML", "end_markers": [], "color": "cyan"},
-        b"{\n": {"name": "JSON", "end_markers": [], "color": "cyan"},
     }
 
     def hex_dump(self, filepath: str, offset: int = 0,
@@ -160,15 +152,15 @@ class HexEditor:
             ))
 
         # Detect embedded signatures (not at offset 0)
+        # Embedded format sigs — only scan for distinctive patterns (5+ bytes)
+        # MZ removed: 2 bytes match random binary data
         embedded_formats = [
-            (b"MZ", "PE/EXE (embedded)"),
             (b"\x7fELF", "ELF (embedded)"),
             (b"PK\x03\x04", "ZIP (embedded)"),
-            (b"%PDF", "PDF (embedded)"),
+            (b"%PDF-", "PDF (embedded)"),
             (b"#!/bin/", "Shell script (embedded)"),
             (b"#!/usr/bin/env", "Script (embedded)"),
             (b"<script", "JavaScript (embedded)"),
-            (b"<%", "Server script (embedded)"),
             (b"WScript", "VBScript (embedded)"),
             (b"powershell", "PowerShell (embedded)"),
         ]
