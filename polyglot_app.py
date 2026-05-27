@@ -1006,12 +1006,18 @@ class PolyglotApp(QMainWindow):
             b=btn(text,T.DIM); b.clicked.connect(cb); sb.addWidget(b)
         l.addLayout(sb)
 
-        # Populate on show
-        QTimer.singleShot(100, self._al_refresh)
+        # Populate on show — wrapped to handle widget deletion
+        QTimer.singleShot(300, self._safe_al_refresh)
         return p
 
+    def _safe_al_refresh(self):
+        try: self._al_refresh()
+        except RuntimeError: pass
+
     def _al_refresh(self):
-        self.al_tree.clear()
+        if not hasattr(self, 'al_tree'): return
+        try: self.al_tree.clear()
+        except RuntimeError: return
         log_dir = os.path.expanduser("~/.polyglot/logs")
         if not os.path.isdir(log_dir): self.al_count.setText("0 entries"); return
         count = 0
@@ -1447,13 +1453,21 @@ class PolyglotApp(QMainWindow):
 
         l.addWidget(tabs, 1)
 
-        # Auto-refresh on show
-        QTimer.singleShot(200, self._refresh_monitor_logs)
-        QTimer.singleShot(200, self._refresh_monitor_metrics)
+        # Auto-refresh on show — wrapped to handle widget deletion
+        QTimer.singleShot(500, self._safe_refresh_monitor)
         return p
 
+    def _safe_refresh_monitor(self):
+        """Safe wrapper — widgets may be deleted if stack was rebuilt."""
+        try: self._refresh_monitor_logs()
+        except RuntimeError: pass
+        try: self._refresh_monitor_metrics()
+        except RuntimeError: pass
+
     def _refresh_monitor_logs(self):
-        self.mon_live_log.clear()
+        if not hasattr(self, 'mon_live_log'): return
+        try: self.mon_live_log.clear()
+        except RuntimeError: return
         log_dir = os.path.expanduser("~/.polyglot/logs")
         if not os.path.isdir(log_dir):
             append_log(self.mon_live_log, "No log directory found", T.DIM)
@@ -1475,7 +1489,9 @@ class PolyglotApp(QMainWindow):
         append_log(self.mon_live_log, f"\nLoaded {count} log entries", T.DIM)
 
     def _refresh_monitor_alerts(self):
-        self.mon_alerts.clear()
+        if not hasattr(self, 'mon_alerts'): return
+        try: self.mon_alerts.clear()
+        except RuntimeError: return
         log_dir = os.path.expanduser("~/.polyglot/logs")
         if not os.path.isdir(log_dir):
             append_log(self.mon_alerts, "No alerts found", T.DIM)
@@ -1496,7 +1512,9 @@ class PolyglotApp(QMainWindow):
         append_log(self.mon_alerts, f"\n{count} alerts found", T.DIM)
 
     def _refresh_monitor_metrics(self):
-        self.mon_metrics.clear()
+        if not hasattr(self, 'mon_metrics'): return
+        try: self.mon_metrics.clear()
+        except RuntimeError: return
         append_log(self.mon_metrics, "═══ Dashboard Metrics ═══", T.CYAN)
         append_log(self.mon_metrics, f"  Files Scanned:  {self.counts['scanned']}", T.FG)
         append_log(self.mon_metrics, f"  Threats Found:  {self.counts['threats']}", T.RED)
