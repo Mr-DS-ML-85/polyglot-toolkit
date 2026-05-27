@@ -18,6 +18,7 @@ Usage:
 
 import sys
 import os
+import json
 import struct
 import math
 import zlib
@@ -32,6 +33,11 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from collections import deque
+try:
+    from engines.quarantine import QuarantineManager
+    HAS_QUARANTINE = True
+except ImportError:
+    HAS_QUARANTINE = False
 
 try:
     from rich.console import Console
@@ -842,9 +848,9 @@ class PolyglotSanitizer:
                     ('.gif',):('GIF',b'\x3b',1,64),('.pdf',):('PDF',b'%%EOF',5,0)}
         for exts,(name,m,extra,min_off) in handlers.items():
             if ext in exts or (ct and ct == name):
-                # Use find (first occurrence) not rfind — polyglot payloads may
-                # contain end markers, rfind would find those instead of the real one
-                pos = data.find(m, min_off)
+                # Use rfind (last occurrence) — polyglot payloads may
+                # contain end markers; find would cut at the wrong one
+                pos = data.rfind(m)
                 if pos!=-1 and pos+extra<=len(data):
                     trailing = data[pos+extra:]
                     # Check if trailing data is safe (metadata, not payload)
@@ -895,6 +901,10 @@ class PolyglotTUI:
         self.sanitizer = PolyglotSanitizer()
         self.stats = {'scanned':0,'threats':0,'sanitized':0,'built':0}
         self.alerts = deque(maxlen=50)
+        if HAS_QUARANTINE:
+            self.quarantine_mgr = QuarantineManager(quarantine_dir=os.path.expanduser("~/.polyglot/quarantine"))
+        else:
+            self.quarantine_mgr = None
 
     def safe_input(self, prompt_text, default=None, choices=None):
         """Input with KeyboardInterrupt handling."""
@@ -914,6 +924,93 @@ class PolyglotTUI:
         except (KeyboardInterrupt, EOFError):
             console.print("\n[dim]Cancelled.[/dim]")
             return None
+
+    def _findings_to_scan_result(self, filepath, findings):
+        """Convert PolyglotDetector findings to QuarantineManager scan_result format."""
+        sev_map = {'critical': 95, 'high': 80, 'warning': 50, 'info': 20, 'error': 0}
+        max_sev = max((sev_map.get(f.get('severity', 'info'), 0) for f in findings), default=0)
+        max_sev_name = 'CRITICAL' if max_sev >= 90 else 'HIGH' if max_sev >= 70 else 'MEDIUM' if max_sev >= 40 else 'LOW'
+        # Pick the highest-severity finding's type as the primary label (not random set order)
+        sorted_findings = sorted(findings, key=lambda f: sev_map.get(f.get('severity', 'info'), 0), reverse=True)
+        primary_label = sorted_findings[0].get('type', 'UNKNOWN') if sorted_findings else 'UNKNOWN'
+        types = list({f.get('type', 'UNKNOWN') for f in findings})
+        return {
+            'label': primary_label,
+            'confidence': max_sev / 100.0,
+            'risk_score': float(max_sev),
+            'risk_level': max_sev_name,
+            'yara_matches': [],
+            'detected_types': types,
+        }
+
+    def menu_quarantine(self):
+        """Quarantine management — list, restore, delete quarantined files."""
+        console.print()
+        if not self.quarantine_mgr:
+            console.print("[red]✗ Quarantine module not available (engines/quarantine.py missing)[/red]")
+            return
+        console.print(Panel("[bold red]🔒 QUARANTINE VAULT[/bold red]", border_style="red"))
+        stats = self.quarantine_mgr.get_stats()
+        console.print(f"  [dim]Vault: {stats['vault_path']}[/dim]")
+        console.print(f"  [dim]Active: {stats['active_quarantine']} | Restored: {stats['restored']} | Size: {stats['total_size_mb']} MB[/dim]\n")
+
+        console.print("  [cyan]1.[/cyan] List quarantined files")
+        console.print("  [cyan]2.[/cyan] Restore file by ID")
+        console.print("  [cyan]3.[/cyan] Restore ALL files")
+        console.print("  [cyan]4.[/cyan] Delete file permanently")
+        console.print("  [cyan]5.[/cyan] Purge expired entries")
+        console.print("  [cyan]0.[/cyan] Back\n")
+
+        choice = self.safe_input("[bold cyan]Choice[/bold cyan]", default="0",
+                                  choices=["0", "1", "2", "3", "4", "5"])
+        if choice is None or choice == "0":
+            return
+
+        if choice == "1":
+            entries = self.quarantine_mgr.list_quarantined()
+            if not entries:
+                console.print("[dim]Vault is empty.[/dim]")
+                return
+            console.print(f"\n  [bold]{len(entries)} quarantined files:[/bold]\n")
+            for e in entries:
+                ts = e.get('timestamp', '?')[:19]
+                name = e.get('original_name', '?')
+                qid = e.get('quarantine_id', '?')
+                risk = e.get('risk_level', '?')
+                conf = e.get('confidence', 0)
+                label = e.get('label', '?')
+                console.print(f"    [red]{qid}[/red]  {name}  [dim]{ts}[/dim]  "
+                              f"[yellow]{risk}[/yellow] {conf:.0%}  [dim]{label}[/dim]")
+
+        elif choice == "2":
+            qid = self.safe_input("[bold cyan]Quarantine ID[/bold cyan] (or prefix)")
+            if qid:
+                dest = self.safe_input("[bold cyan]Restore to[/bold cyan] (empty = original path)", default="")
+                result = self.quarantine_mgr.restore(qid, dest if dest else None)
+                if result:
+                    console.print(f"  [green]✓ Restored to {result}[/green]")
+                else:
+                    console.print("  [red]✗ Not found or restore failed[/red]")
+
+        elif choice == "3":
+            confirm = self.safe_confirm("[bold red]Restore ALL quarantined files?[/bold red]", default=False)
+            if confirm:
+                restored = self.quarantine_mgr.restore_all()
+                console.print(f"  [green]✓ Restored {len(restored)} files[/green]")
+
+        elif choice == "4":
+            qid = self.safe_input("[bold cyan]Quarantine ID to DELETE permanently[/bold cyan]")
+            if qid:
+                confirm = self.safe_confirm(f"[bold red]Permanently delete {qid}?[/bold red]", default=False)
+                if confirm:
+                    if self.quarantine_mgr.delete(qid):
+                        console.print("  [green]✓ Deleted permanently[/green]")
+                    else:
+                        console.print("  [red]✗ Not found[/red]")
+
+        elif choice == "5":
+            purged = self.quarantine_mgr.auto_purge_expired()
+            console.print(f"  [green]✓ Purged {purged} expired entries[/green]")
 
     def banner(self):
         if not HAS_RICH:
@@ -948,6 +1045,7 @@ class PolyglotTUI:
                 "  [bold red]16[/bold red] │ 🔢 [white]Hex Editor[/white]\n"
                 "  [bold red]17[/bold red] │ ⚔  [white]Exploitation & Attack Paths[/white]\n"
                 "  [bold red]18[/bold red] │ 🔵 [white]Blue Side Monitoring[/white]\n"
+                "  [bold red]19[/bold red] │ 🔒 [white]Quarantine Vault[/white]\n"
                 "  [bold red]0[/bold red] │ ✕  [dim]Exit[/dim]\n",
                 title="[bold red]◆ POLYGLOT[/bold red]",
                 subtitle="[dim]v3.0 — Red Team + Shield Edition[/dim]",
@@ -956,7 +1054,7 @@ class PolyglotTUI:
             ))
 
             choice = self.safe_input("\n[bold red]Select[/bold red]",
-                                     choices=["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18"],
+                                     choices=["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19"],
                                      default="1")
             if choice is None:
                 continue
@@ -1000,6 +1098,8 @@ class PolyglotTUI:
                 self.menu_exploitation()
             elif choice == "18":
                 self.menu_blue_side()
+            elif choice == "19":
+                self.menu_quarantine()
 
     # ── Builder Menu ─────────────────────────────────────────
 
@@ -1155,6 +1255,7 @@ class PolyglotTUI:
             pass
 
         threats = 0
+        threat_files = []  # Collect files with critical/high threats for quarantine
         with Progress(SpinnerColumn(), TextColumn("[bold]{task.description}"),
                      BarColumn(), TaskProgressColumn(), console=console) as progress:
             task = progress.add_task("Scanning...", total=len(files))
@@ -1180,6 +1281,7 @@ class PolyglotTUI:
                         if crit:
                             threats += len(crit)
                             self.stats['threats'] += len(crit)
+                            threat_files.append((fpath, findings))
                             console.print(f"  [bold red]⚠ {fname}[/bold red]")
                             for f in findings:
                                 sev = f['severity']
@@ -1212,6 +1314,35 @@ class PolyglotTUI:
                 border_style="red", title="Scan Complete"
             ))
             Notifier.send("THREATS DETECTED", f"{threats} threats in {len(files)} files", "critical")
+            self.alerts.append({"time": datetime.now().strftime('%H:%M:%S'), "file": f"{threats} threats", "severity": "critical", "detail": f"{threats} threats in {len(files)} files"})
+
+            # Offer quarantine for files with critical/high findings
+            if threat_files and self.quarantine_mgr:
+                console.print()
+                q_choice = self.safe_input(
+                    "[bold cyan]Quarantine threats?[/bold cyan] "
+                    "[dim]([green]a[/green]=all, [yellow]i[/yellow]=interactive, [red]n[/red]=skip)[/dim]",
+                    default="n", choices=["a", "i", "n"]
+                )
+                if q_choice == "a":
+                    for fpath, findings in threat_files:
+                        scan_result = self._findings_to_scan_result(fpath, findings)
+                        qid = self.quarantine_mgr.quarantine(fpath, scan_result, force=True)
+                        if qid:
+                            console.print(f"    [red]🔒 Quarantined[/red] {os.path.basename(fpath)} [dim](ID: {qid})[/dim]")
+                        else:
+                            console.print(f"    [yellow]⚠ Skipped[/yellow] {os.path.basename(fpath)}")
+                elif q_choice == "i":
+                    for fpath, findings in threat_files:
+                        fname = os.path.basename(fpath)
+                        do_q = self.safe_confirm(f"  Quarantine [red]{fname}[/red]?", default=True)
+                        if do_q:
+                            scan_result = self._findings_to_scan_result(fpath, findings)
+                            qid = self.quarantine_mgr.quarantine(fpath, scan_result, force=True)
+                            if qid:
+                                console.print(f"    [red]🔒 Quarantined[/red] {fname} [dim](ID: {qid})[/dim]")
+                            else:
+                                console.print(f"    [yellow]⚠ Failed[/yellow] {fname}")
         else:
             console.print(Panel(
                 f"[bold green]✓ ALL CLEAN[/bold green]\n"
@@ -1309,14 +1440,17 @@ class PolyglotTUI:
 
     # ── Monitor Menu ─────────────────────────────────────────
 
-    def menu_monitor(self):
+    def menu_monitor(self, cli_directory=None):
         console.print()
         console.print(Panel("[bold cyan]▶ REAL-TIME MONITOR[/bold cyan]", border_style="cyan"))
         console.print("  [dim]Monitors directory for new/changed files and scans them[/dim]\n")
 
-        directory = self.safe_input("[bold cyan]Watch directory[/bold cyan]",
-                                   default=str(Path.home() / "Downloads"))
-        if directory is None: return
+        if cli_directory:
+            directory = cli_directory
+        else:
+            directory = self.safe_input("[bold cyan]Watch directory[/bold cyan]",
+                                       default=str(Path.home() / "Downloads"))
+            if directory is None: return
         if not os.path.isdir(directory):
             console.print(f"[red]✗ Not a directory: {directory}[/red]")
             return
@@ -1328,6 +1462,8 @@ class PolyglotTUI:
         file_hashes = {}
         scanned = 0
         threats = 0
+        threat_files = []  # Track files with critical/high threats for quarantine
+        threat_seen = set()  # O(1) duplicate check
 
         scan_exts = {'.jpg','.jpeg','.png','.gif','.bmp','.pdf','.doc','.docx',
                      '.zip','.exe','.dll','.scr','.bat','.cmd','.ps1','.vbs',
@@ -1356,21 +1492,53 @@ class PolyglotTUI:
                             except Exception:
                                 continue
                             scanned += 1
+                            self.stats['scanned'] += 1
 
                             crit = [f for f in findings if f['severity'] in ('critical','high')]
                             if crit:
                                 threats += len(crit)
+                                self.stats['threats'] += len(crit)
+                                if fpath not in threat_seen:
+                                    threat_seen.add(fpath)
+                                    threat_files.append((fpath, findings))
                                 ts = datetime.now().strftime('%H:%M:%S')
                                 console.print(f"[bold red]  [{ts}] ⚠ {fname}[/bold red]")
                                 for f in crit[:3]:
                                     console.print(f"    [red]→ {f['detail']}[/red]")
                                 Notifier.send(f"THREAT: {fname}", crit[0]['detail'][:100], "critical")
+                                self.alerts.append({"time": ts, "file": fname, "severity": "critical", "detail": crit[0]['detail'][:100]})
                             elif not findings:
                                 console.print(f"  [dim]✓ {fname}[/dim]")
 
                 time.sleep(3)
         except KeyboardInterrupt:
             console.print(f"\n\n[dim]Stopped. Scanned: {scanned} | Threats: {threats}[/dim]")
+
+            # Offer quarantine for monitored threats
+            if threat_files and self.quarantine_mgr:
+                console.print(f"\n  [bold red]{len(threat_files)} files had threats:[/bold red]")
+                for fpath, _ in threat_files:
+                    console.print(f"    [red]⚠ {os.path.basename(fpath)}[/red]")
+                q_choice = self.safe_input(
+                    "[bold cyan]Quarantine?[/bold cyan] "
+                    "[dim]([green]a[/green]=all, [yellow]i[/yellow]=interactive, [red]n[/red]=skip)[/dim]",
+                    default="n", choices=["a", "i", "n"]
+                )
+                if q_choice == "a":
+                    for fpath, findings in threat_files:
+                        scan_result = self._findings_to_scan_result(fpath, findings)
+                        qid = self.quarantine_mgr.quarantine(fpath, scan_result, force=True)
+                        if qid:
+                            console.print(f"    [red]🔒 Quarantined[/red] {os.path.basename(fpath)} [dim](ID: {qid})[/dim]")
+                elif q_choice == "i":
+                    for fpath, findings in threat_files:
+                        fname = os.path.basename(fpath)
+                        do_q = self.safe_confirm(f"  Quarantine [red]{fname}[/red]?", default=True)
+                        if do_q:
+                            scan_result = self._findings_to_scan_result(fpath, findings)
+                            qid = self.quarantine_mgr.quarantine(fpath, scan_result, force=True)
+                            if qid:
+                                console.print(f"    [red]🔒 Quarantined[/red] {fname} [dim](ID: {qid})[/dim]")
 
     # ── Dashboard ────────────────────────────────────────────
 
@@ -1486,8 +1654,12 @@ class PolyglotTUI:
 
         try:
             from server import main as server_main
+            old_argv = sys.argv
             sys.argv = ['server.py', '--host', host, '--port', str(port)]
-            server_main()
+            try:
+                server_main()
+            finally:
+                sys.argv = old_argv
         except KeyboardInterrupt:
             console.print("\n\n[dim]Server stopped.[/dim]")
         except ImportError as e:
@@ -2089,6 +2261,8 @@ class PolyglotTUI:
         # Run all engines and correlate
         console.print(f"\n[dim]Correlating findings in {target}...[/dim]\n")
         correlated = {}
+        threat_files = []  # Track files with critical/high findings
+        threat_seen = set()
         files = [os.path.join(r, f) for r, _, fs in os.walk(target)
                  for f in fs if not f.startswith('.')][:50]
 
@@ -2097,6 +2271,10 @@ class PolyglotTUI:
             try:
                 findings = self.detector.scan_file(fpath)
                 if findings:
+                    crit = [f for f in findings if f.get('severity') in ('critical','high')]
+                    if crit and fpath not in threat_seen:
+                        threat_seen.add(fpath)
+                        threat_files.append((fpath, findings))
                     for f in findings:
                         ftype = f.get("type", "unknown")
                         if ftype not in correlated:
@@ -2113,6 +2291,30 @@ class PolyglotTUI:
             console.print(f"  [bold red]{ftype}[/bold red] ({len(instances)} instances)")
             for inst in instances[:5]:
                 console.print(f"    {inst['file']}: {inst.get('detail', '')[:80]}")
+
+        # Offer quarantine for correlated threats
+        if threat_files and self.quarantine_mgr:
+            console.print()
+            q_choice = self.safe_input(
+                f"[bold cyan]Quarantine {len(threat_files)} threat files?[/bold cyan] "
+                "[dim]([green]a[/green]=all, [yellow]i[/yellow]=interactive, [red]n[/red]=skip)[/dim]",
+                default="n", choices=["a", "i", "n"]
+            )
+            if q_choice == "a":
+                for fpath, findings in threat_files:
+                    scan_result = self._findings_to_scan_result(fpath, findings)
+                    qid = self.quarantine_mgr.quarantine(fpath, scan_result, force=True)
+                    if qid:
+                        console.print(f"    [red]🔒 Quarantined[/red] {os.path.basename(fpath)} [dim](ID: {qid})[/dim]")
+            elif q_choice == "i":
+                for fpath, findings in threat_files:
+                    fname = os.path.basename(fpath)
+                    do_q = self.safe_confirm(f"  Quarantine [red]{fname}[/red]?", default=True)
+                    if do_q:
+                        scan_result = self._findings_to_scan_result(fpath, findings)
+                        qid = self.quarantine_mgr.quarantine(fpath, scan_result, force=True)
+                        if qid:
+                            console.print(f"    [red]🔒 Quarantined[/red] {fname} [dim](ID: {qid})[/dim]")
 
     def _tagged_events(self):
         """View events by tags."""
@@ -2898,7 +3100,7 @@ def main():
         cli_sanitize(args[1:])
     elif args[0] == "monitor":
         tui = PolyglotTUI()
-        tui.menu_monitor()
+        tui.menu_monitor(cli_directory=args[1] if len(args) > 1 else None)
     elif args[0] in ("help", "--help", "-h"):
         print(__doc__)
     else:

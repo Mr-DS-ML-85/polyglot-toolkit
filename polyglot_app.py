@@ -322,18 +322,19 @@ class ScanWorker(QThread):
         self.use_ml = use_ml
         self.model = model
         self.detector = PolyglotDetector()
+        self.yara = YaraEngine()
 
     def run(self):
         results = []
         threats = 0
+        threat_files = []  # Track files with threats for quarantine
         for i, fpath in enumerate(self.files):
             self.progress.emit(i+1, len(self.files))
             try:
                 if self.use_ml and self.model and self.model.is_loaded:
                     feats = extract_features_from_file(fpath)
                     pred = self.model.predict_single(feats)
-                    yara = YaraEngine()
-                    yara_matches, _ = yara.scan_file(fpath)
+                    yara_matches, _ = self.yara.scan_file(fpath)
                     findings = self.detector.scan_file(fpath)
                     r = {
                         'file': os.path.basename(fpath), 'path': fpath,
@@ -344,7 +345,9 @@ class ScanWorker(QThread):
                         'findings': len(findings),
                         'severity': 'critical' if pred['risk_score']>=80 else 'high' if pred['risk_score']>=60 else 'warning' if pred['risk_score']>=40 else 'clean',
                     }
-                    if pred['risk_score'] >= 50: threats += 1
+                    if pred['risk_score'] >= 50:
+                        threats += 1
+                        threat_files.append((fpath, findings))
                 else:
                     findings = self.detector.scan_file(fpath)
                     crit = [f for f in findings if f['severity'] in ('critical','high')]
@@ -354,12 +357,14 @@ class ScanWorker(QThread):
                         'details': findings,
                         'severity': 'critical' if crit else 'warning' if findings else 'clean',
                     }
-                    if crit: threats += 1
+                    if crit:
+                        threats += 1
+                        threat_files.append((fpath, findings))
                 results.append(r)
                 self.result.emit(r)
             except Exception as e:
                 results.append({'file': os.path.basename(fpath), 'error': str(e), 'severity': 'error'})
-        self.done.emit({'total': len(self.files), 'threats': threats, 'results': results})
+        self.done.emit({'total': len(self.files), 'threats': threats, 'results': results, 'threat_files': threat_files})
 
 
 class TrainWorker(QThread):
@@ -465,6 +470,7 @@ class MonitorWorker(QThread):
                 'file': os.path.basename(fp), 'path': fp,
                 'severity': 'critical' if any(f['severity']=='critical' for f in crit) else 'high',
                 'detail': '; '.join(f['detail'] for f in crit[:3]),
+                'findings': findings,  # Pass findings for quarantine
             }
             self.alert_signal(alert)
             Notifier.send(f"THREAT: {os.path.basename(fp)}", alert['detail'][:200], "critical")
@@ -503,6 +509,13 @@ class PolyglotApp(QMainWindow):
         self.mon_worker = None
 
         self.counts = {'scanned':0,'threats':0,'sanitized':0,'built':0}
+
+        # Init quarantine manager early (before UI build)
+        self.q_manager = QuarantineManager(
+            quarantine_dir=self.config.quarantine.get("dir","quarantine"),
+            encrypt_names=self.config.quarantine.get("encrypt_names",True),
+            max_size_mb=self.config.quarantine.get("max_size_mb",500),
+            retain_days=self.config.quarantine.get("retain_days",30))
 
         self._apply_theme()
         self._build_ui()
@@ -697,11 +710,7 @@ class PolyglotApp(QMainWindow):
         p = QWidget(); l = QVBoxLayout(p); l.setContentsMargins(30,25,30,25); l.setSpacing(15)
         l.addWidget(self._header("🛡 Quarantine Vault", T.GREEN))
 
-        self.q_manager = QuarantineManager(
-            quarantine_dir=self.config.quarantine.get("dir","quarantine"),
-            encrypt_names=self.config.quarantine.get("encrypt_names",True),
-            max_size_mb=self.config.quarantine.get("max_size_mb",500),
-            retain_days=self.config.quarantine.get("retain_days",30))
+        # q_manager already initialized in __init__
 
         br = QHBoxLayout()
         rb=btn("🔄 Refresh",T.DIM); rb.clicked.connect(self._refresh_quarantine); br.addWidget(rb)
@@ -723,7 +732,7 @@ class PolyglotApp(QMainWindow):
 
     def _pg_yara(self):
         p = QWidget(); l = QVBoxLayout(p); l.setContentsMargins(30,25,30,25); l.setSpacing(15)
-        l.addWidget(self._header("📋 YARA Rules (26 Built-in)", T.YELLOW))
+        l.addWidget(self._header("📋 YARA Rules (49 Built-in)", T.YELLOW))
 
         self.y_tree = QTreeWidget()
         self.y_tree.setHeaderLabels(["Rule","Severity","Description","Patterns"])
@@ -763,12 +772,19 @@ class PolyglotApp(QMainWindow):
 
         tc, tl = card("Detection Thresholds","🎯")
         g = QGridLayout(); g.setSpacing(12)
+        self._threshold_spinboxes = {}
         for i,(name,key,default) in enumerate([("Detect","detect",0.65),("Quarantine","quarantine",0.80),("Alert","alert",0.50)]):
             g.addWidget(QLabel(f"{name}:"),i,0)
             sp = QSpinBox(); sp.setRange(0,100); sp.setValue(int(self.config.thresholds.get(key,default)*100))
             sp.setStyleSheet(f"background:{T.BG_IN};color:{T.FG};border:1px solid {T.BORDER};border-radius:4px;padding:6px"); sp.setSuffix("%")
             g.addWidget(sp,i,1)
-        tl.addLayout(g); l.addWidget(tc)
+            self._threshold_spinboxes[key] = sp
+        tl.addLayout(g)
+        save_btn = QPushButton("💾 Save Thresholds"); save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.setStyleSheet(f"background:{T.BLUE};color:white;border:none;border-radius:6px;padding:8px 16px;font-weight:bold;margin-top:8px")
+        save_btn.clicked.connect(self._save_thresholds)
+        tl.addWidget(save_btn)
+        l.addWidget(tc)
 
         nc, nl = card("Notifications","🔔")
         self.n_enabled = QCheckBox("Enable desktop notifications"); self.n_enabled.setChecked(True)
@@ -790,6 +806,27 @@ class PolyglotApp(QMainWindow):
 
     def _header(self, text, color=T.FG):
         h = QLabel(text); h.setStyleSheet(f"font-size:24px;font-weight:bold;color:{color};"); return h
+
+    def _save_thresholds(self):
+        for key, sp in self._threshold_spinboxes.items():
+            self.config.thresholds[key] = sp.value() / 100.0
+        try:
+            import yaml
+            cfg_path = os.path.expanduser("~/.polyglot/config.yaml")
+            with open(cfg_path, 'r') as f:
+                cfg = yaml.safe_load(f) or {}
+            cfg['thresholds'] = self.config.thresholds
+            with open(cfg_path, 'w') as f:
+                yaml.dump(cfg, f, default_flow_style=False)
+            self._log(f"Thresholds saved: {self.config.thresholds}", "success")
+        except Exception as e:
+            self._log(f"Save failed: {e}", "critical")
+
+    def _notify(self, title, msg, severity="info"):
+        """Send notification if enabled in settings."""
+        if hasattr(self, 'n_enabled') and self.n_enabled.isChecked():
+            if severity == "critical" or not hasattr(self, 'n_critical') or not self.n_critical.isChecked():
+                Notifier.send(title, msg, severity)
 
     def _browse(self, entry):
         p,_ = QFileDialog.getOpenFileName(self,"Select File")
@@ -869,6 +906,19 @@ class PolyglotApp(QMainWindow):
         if stats['threats']>0:
             Notifier.send("THREATS DETECTED",f"{stats['threats']} threats in {stats['total']} files","critical")
             append_log(self.d_alerts, f"[{datetime.now().strftime('%H:%M:%S')}] ⚠ {stats['threats']} threats in {stats['total']} files", T.RED)
+            # Auto-quarantine: offer to quarantine files flagged as threats
+            if stats.get('threat_files'):
+                reply = QMessageBox.question(self, "Quarantine Threats",
+                    f"{stats['threats']} threats detected. Quarantine {len(stats['threat_files'])} files?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply == QMessageBox.StandardButton.Yes:
+                    quarantined = 0
+                    for fpath, findings in stats['threat_files']:
+                        scan_result = self._findings_to_scan_result(fpath, findings)
+                        qid = self.q_manager.quarantine(fpath, scan_result, force=True)
+                        if qid: quarantined += 1
+                    self._log(f"Quarantined {quarantined} files", "critical")
+                    self._refresh_quarantine()
 
     # ── Monitor Action ───────────────────────────────────────
 
@@ -888,15 +938,41 @@ class PolyglotApp(QMainWindow):
             self.mon_worker.stats.connect(self._on_monitor_stats)
             self.mon_worker.start_watch(d)
 
+    def _findings_to_scan_result(self, filepath, findings):
+        """Convert detector findings to QuarantineManager scan_result format."""
+        sev_map = {'critical': 95, 'high': 80, 'warning': 50, 'info': 20, 'error': 0}
+        max_sev = max((sev_map.get(f.get('severity', 'info'), 0) for f in findings), default=0)
+        max_sev_name = 'CRITICAL' if max_sev >= 90 else 'HIGH' if max_sev >= 70 else 'MEDIUM' if max_sev >= 40 else 'LOW'
+        sorted_findings = sorted(findings, key=lambda f: sev_map.get(f.get('severity', 'info'), 0), reverse=True)
+        primary_label = sorted_findings[0].get('type', 'UNKNOWN') if sorted_findings else 'UNKNOWN'
+        types = list({f.get('type', 'UNKNOWN') for f in findings})
+        return {
+            'label': primary_label,
+            'confidence': max_sev / 100.0,
+            'risk_score': float(max_sev),
+            'risk_level': max_sev_name,
+            'yara_matches': [],
+            'detected_types': types,
+        }
+
     def _on_monitor_alert(self, a):
         append_log(self.m_feed, f"[{a['time']}] [{a['severity'].upper()}] {a['file']}", T.RED)
         append_log(self.m_feed, f"  → {a['detail']}", T.DIM)
         append_log(self.d_alerts, f"[{a['time']}] ⚠ {a['file']}: {a['detail']}", T.RED)
         self.counts['threats'] += 1; self.d_threats._val.setText(str(self.counts['threats']))
+        # Auto-quarantine monitored threats
+        if a.get('path') and a.get('findings') and hasattr(self, 'q_manager'):
+            scan_result = self._findings_to_scan_result(a['path'], a['findings'])
+            qid = self.q_manager.quarantine(a['path'], scan_result, force=True)
+            if qid:
+                append_log(self.d_alerts, f"  🔒 Quarantined {a['file']} (ID: {qid})", T.ORANGE)
+                self._log(f"Auto-quarantined: {a['file']}", "critical")
 
     def _on_monitor_stats(self, s):
         self.m_scanned._val.setText(str(s['scanned'])); self.m_threats._val.setText(str(s['threats'])); self.m_clean._val.setText(str(s['clean']))
-        self.d_scanned._val.setText(str(s['scanned']))
+        # Dashboard shows total (scanner + monitor)
+        total_scanned = self.counts['scanned'] + s['scanned']
+        self.d_scanned._val.setText(str(total_scanned))
 
     # ── Training Action ──────────────────────────────────────
 
@@ -926,24 +1002,20 @@ class PolyglotApp(QMainWindow):
 
     def _refresh_quarantine(self):
         self.q_tree.clear()
-        meta_path = Path(self.config.quarantine.get("dir","quarantine")) / "metadata.jsonl"
-        if not meta_path.exists(): return
+        entries = self.q_manager.list_quarantined()
         sev_colors = {'CRITICAL':T.RED,'HIGH':T.ORANGE,'MEDIUM':T.YELLOW,'LOW':T.DIM,'SAFE':T.GREEN}
-        with open(meta_path) as f:
-            for line in f:
-                try:
-                    m = json.loads(line.strip())
-                    status = "Restored" if m.get('restored') else "Quarantined"
-                    item = QTreeWidgetItem([m.get('quarantine_id','?')[:8], m.get('original_name','?'),
-                                            m.get('risk_level','?'), f"{m.get('confidence',0):.2f}",
-                                            m.get('timestamp','?')[:19], status])
-                    color = sev_colors.get(m.get('risk_level',''), T.FG)
-                    for i in range(6): item.setForeground(i, QColor(color))
-                    self.q_tree.addTopLevelItem(item)
-                except: pass
+        for m in entries:
+            status = "Restored" if m.get('restored') else "Quarantined"
+            item = QTreeWidgetItem([m.get('quarantine_id','?')[:8], m.get('original_name','?'),
+                                    m.get('risk_level','?'), f"{m.get('confidence',0):.2f}",
+                                    m.get('timestamp','?')[:19], status])
+            color = sev_colors.get(m.get('risk_level',''), T.FG)
+            for i in range(6): item.setForeground(i, QColor(color))
+            self.q_tree.addTopLevelItem(item)
 
     def _purge_quarantine(self):
-        self.q_manager._purge_oldest()
+        purged = self.q_manager.auto_purge_expired()
+        self._log(f"Purged {purged} expired entries","info")
         self._refresh_quarantine()
 
     def _restore_quarantine(self):
@@ -960,6 +1032,15 @@ class PolyglotApp(QMainWindow):
     def _delete_quarantine(self):
         item = self.q_tree.currentItem()
         if not item: return
+        qid = item.text(0)
+        reply = QMessageBox.question(self, "Confirm Delete",
+            f"Permanently delete quarantined file {qid}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.q_manager.delete(qid):
+                self._log(f"Deleted: {qid}","warning")
+            else:
+                self._log("Delete failed — not found","critical")
         self._refresh_quarantine()
 
     # ── YARA / Logs / Settings ───────────────────────────────

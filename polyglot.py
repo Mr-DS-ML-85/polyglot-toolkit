@@ -29,7 +29,6 @@ import shutil
 
 # Ensure we can find engines/ relative to this file
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-os.chdir(SCRIPT_DIR)
 sys.path.insert(0, SCRIPT_DIR)
 
 # ═══════════════════════════════════════════════════════════════
@@ -284,7 +283,7 @@ def run_scan(args):
 
 def run_sanitize(args):
     """CLI: Sanitize files (strip hidden payloads)."""
-    from polyglot_tui import PolyglotSanitizer
+    from polyglot_tui import PolyglotSanitizer, PolyglotDetector
 
     if not args:
         print("Usage: polyglot sanitize <file_or_dir> [--no-backup] [--dry-run]")
@@ -294,6 +293,7 @@ def run_sanitize(args):
     backup = "--no-backup" not in args
     dry_run = "--dry-run" in args
     sanitizer = PolyglotSanitizer()
+    detector = PolyglotDetector() if dry_run else None
 
     if os.path.isfile(target):
         files = [target]
@@ -318,17 +318,26 @@ def run_sanitize(args):
         fname = os.path.basename(fpath)
         prefix = "[DRY-RUN] " if dry_run else ""
         try:
-            result = sanitizer.sanitize(fpath, backup and not dry_run)
-            if result.get('safe_metadata'):
-                print(f"{prefix}○ {fname} — {result['detail']} (safe, not modified)")
-            elif result['status'] == 'sanitized':
-                sanitized += 1
-                print(f"{prefix}✓ {fname} — {result['detail']}")
-            elif result['status'] == 'danger':
-                dangers += 1
-                print(f"{prefix}⚠ {fname} — {result['detail']}")
+            if dry_run:
+                # Dry-run: only scan to detect what WOULD be sanitized
+                findings = detector.scan_file(fpath) if detector else []
+                if findings:
+                    sanitized += 1
+                    print(f"{prefix}✓ {fname} — {len(findings)} finding(s) would be sanitized")
+                else:
+                    print(f"{prefix}○ {fname} — clean")
             else:
-                print(f"{prefix}○ {fname} — {result['detail']}")
+                result = sanitizer.sanitize(fpath, backup)
+                if result.get('safe_metadata'):
+                    print(f"{prefix}○ {fname} — {result['detail']} (safe, not modified)")
+                elif result['status'] == 'sanitized':
+                    sanitized += 1
+                    print(f"{prefix}✓ {fname} — {result['detail']}")
+                elif result['status'] == 'danger':
+                    dangers += 1
+                    print(f"{prefix}⚠ {fname} — {result['detail']}")
+                else:
+                    print(f"{prefix}○ {fname} — {result['detail']}")
         except Exception as e:
             print(f"{prefix}✗ {fname} — error: {e}")
 
@@ -457,7 +466,7 @@ def run_monitor(args):
     try:
         from polyglot_tui import PolyglotTUI
         tui = PolyglotTUI()
-        tui.menu_monitor()
+        tui.menu_monitor(directory)
     except KeyboardInterrupt:
         print("\n\nMonitor stopped.")
         sys.exit(0)
@@ -472,6 +481,7 @@ def run_server(args):
     except ImportError as e:
         print(f"Server dependencies not available: {e}")
         print("Install: pip install flask")
+        sys.exit(1)
     except KeyboardInterrupt:
         print("\n\nServer stopped.")
         sys.exit(0)

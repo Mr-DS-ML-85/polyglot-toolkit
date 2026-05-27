@@ -29,9 +29,9 @@ import sys, os, json, time, logging, argparse, tempfile
 from pathlib import Path
 from datetime import datetime
 from collections import deque
+import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-os.chdir(SCRIPT_DIR)
 sys.path.insert(0, SCRIPT_DIR)
 
 from flask import Flask, request, jsonify, send_from_directory, Response
@@ -51,9 +51,95 @@ logger = logging.getLogger("polyglot_server")
 
 app = Flask(__name__)
 
+# ── CORS ─────────────────────────────────────────────────────
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get('Origin', '*')
+    response.headers['Access-Control-Allow-Origin'] = origin
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-API-Key'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    return response
+
+# ── Basic Rate Limiting ──────────────────────────────────────
+from collections import defaultdict
+import threading
+_rate_store = defaultdict(list)
+_rate_lock = threading.Lock()
+RATE_LIMIT = 60  # requests per minute per IP
+
+def check_rate_limit():
+    """Simple sliding-window rate limiter. Returns True if allowed."""
+    ip = request.remote_addr or '0.0.0.0'
+    now = time.time()
+    with _rate_lock:
+        window = _rate_store[ip]
+        # Remove entries older than 60s
+        _rate_store[ip] = [t for t in window if now - t < 60]
+        if len(_rate_store[ip]) >= RATE_LIMIT:
+            return False
+        _rate_store[ip].append(now)
+        return True
+
+@app.before_request
+def rate_limit_check():
+    if request.endpoint and not check_rate_limit():
+        return jsonify({'error': 'Rate limit exceeded (60 req/min)'}), 429
+
+# ── Security Helpers ────────────────────────────────────────
+ALLOWED_SCAN_ROOTS = [
+    os.path.expanduser("~"),
+    "/tmp",
+    "/var/tmp",
+    "/opt",
+]
+
+def safe_resolve_path(user_path: str) -> str | None:
+    """Resolve and validate a user-provided path. Returns None if path is unsafe."""
+    if not user_path:
+        return None
+    try:
+        expanded = os.path.expanduser(user_path)
+        real = os.path.realpath(expanded)
+    except (ValueError, OSError):
+        return None  # Null bytes, invalid chars, etc.
+    # Block /etc, /proc, /sys, /dev, /boot, /root (unless running as root)
+    blocked = {'/etc', '/proc', '/sys', '/dev', '/boot', '/run', '/snap'}
+    for b in blocked:
+        if real == b or real.startswith(b + '/'):
+            return None
+    # Must be under an allowed root or be an absolute existing path
+    if not os.path.isabs(real):
+        return None
+    return real if os.path.exists(real) else None
+
+def sanitize_filename(filename: str) -> str:
+    """Strip path components and dangerous chars from uploaded filename."""
+    import re
+    base = os.path.basename(filename or 'upload')
+    # Remove anything not alphanumeric, dash, underscore, dot
+    safe = re.sub(r'[^a-zA-Z0-9._-]', '_', base)
+    return safe[:200] if safe else 'upload'
+
+def require_api_key(f):
+    """Optional API key decorator — if POLYGLOT_API_KEY env is set, checks it."""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        expected = os.environ.get('POLYGLOT_API_KEY')
+        if expected:
+            provided = request.headers.get('X-API-Key', '')
+            if provided != expected:
+                return jsonify({'error': 'Invalid or missing API key'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
 @app.errorhandler(Exception)
 def handle_exception(e):
     """Global error handler — prevents unhandled crashes."""
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e  # Let Flask handle 404, 405, etc. normally
     logger.error(f"Unhandled exception: {e}", exc_info=True)
     return jsonify({'error': str(e)}), 500
 
@@ -106,13 +192,15 @@ def api_status():
     })
 
 @app.route('/api/scan', methods=['POST'])
+@require_api_key
 def api_scan():
     """Scan an uploaded file."""
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
 
     f = request.files['file']
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_{f.filename}')
+    safe_name = sanitize_filename(f.filename)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_{safe_name}')
     f.save(tmp.name)
     tmp.close()
 
@@ -142,14 +230,14 @@ def api_scan():
             state.stats['threats'] += 1
             alert = {
                 'time': datetime.now().strftime('%H:%M:%S'),
-                'file': f.filename,
+                'file': safe_name,
                 'severity': 'critical' if any(f2['severity'] == 'critical' for f2 in crit) else 'high',
                 'detail': '; '.join(f2['detail'] for f2 in crit[:3]),
             }
             state.alerts.appendleft(alert)
 
         result = {
-            'filename': f.filename,
+            'filename': safe_name,
             'findings': findings,
             'ml': ml_result,
             'yara_matches': [{'rule': m.rule_name, 'severity': m.severity,
@@ -162,17 +250,20 @@ def api_scan():
         os.unlink(tmp.name)
 
 @app.route('/api/scan/dir', methods=['POST'])
+@require_api_key
 def api_scan_dir():
     """Scan a directory."""
     data = request.get_json() or {}
     directory = data.get('path', '')
-    if not directory or not os.path.isdir(directory):
-        return jsonify({'error': 'Invalid directory'}), 400
+    directory = os.path.expanduser(directory) if directory else directory
+    safe_dir = safe_resolve_path(directory)
+    if not directory or not safe_dir or not os.path.isdir(safe_dir):
+        return jsonify({'error': 'Invalid or blocked directory path'}), 400
 
     exts = {'.jpg','.jpeg','.png','.gif','.bmp','.pdf','.doc','.docx',
             '.zip','.exe','.dll','.bat','.cmd','.ps1','.vbs','.js','.mp4'}
     files = []
-    for root, dirs, fnames in os.walk(directory):
+    for root, dirs, fnames in os.walk(safe_dir):
         dirs[:] = [d for d in dirs if not d.startswith('.')]
         for f in fnames:
             if os.path.splitext(f)[1].lower() in exts:
@@ -184,7 +275,7 @@ def api_scan_dir():
         findings = state.detector.scan_file(fpath)
         crit = [f for f in findings if f['severity'] in ('critical', 'high')]
         if crit:
-            threats += len(crit)
+            threats += 1  # Count files, not findings
         results.append({
             'file': os.path.basename(fpath),
             'path': fpath,
@@ -204,6 +295,7 @@ def api_scan_dir():
     })
 
 @app.route('/api/sanitize', methods=['POST'])
+@require_api_key
 def api_sanitize():
     """Sanitize an uploaded file."""
     if 'file' not in request.files:
@@ -211,7 +303,8 @@ def api_sanitize():
 
     f = request.files['file']
     backup = request.form.get('backup', 'true') == 'true'
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_{f.filename}')
+    safe_name = sanitize_filename(f.filename)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_{safe_name}')
     f.save(tmp.name)
     tmp.close()
 
@@ -221,8 +314,12 @@ def api_sanitize():
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    finally:
+        try: os.unlink(tmp.name)
+        except: pass
 
 @app.route('/api/build', methods=['POST'])
+@require_api_key
 def api_build():
     """Build a polyglot file. Supports both JSON and FormData."""
     # Handle FormData (file uploads from dashboard)
@@ -231,9 +328,9 @@ def api_build():
         payload_file = request.files.get('payload')
         if not cover_file or not payload_file:
             return jsonify({'error': 'Cover and payload files required'}), 400
-        cover_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_{cover_file.filename}')
+        cover_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_{sanitize_filename(cover_file.filename)}')
         cover_file.save(cover_tmp.name); cover_tmp.close()
-        payload_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_{payload_file.filename}')
+        payload_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_{sanitize_filename(payload_file.filename)}')
         payload_file.save(payload_tmp.name); payload_tmp.close()
         cover, payload = cover_tmp.name, payload_tmp.name
         container = request.form.get('container_type', 'jpeg')
@@ -242,7 +339,16 @@ def api_build():
         encrypt = request.form.get('encrypt', 'false') == 'true'
         fud = request.form.get('fud', 'false') == 'true'
         mime = request.form.get('mime', 'false') == 'true'
-        output = f'polyglot_output.{container}'
+        # Validate container type — whitelist only
+        allowed_containers = {'jpeg','jpg','png','gif','bmp','pdf','zip','docx','xlsx','mp4','webm'}
+        if container not in allowed_containers:
+            return jsonify({'error': f'Invalid container: {container}'}), 400
+        allowed_os = {'windows','macos','linux'}
+        if target_os not in allowed_os:
+            return jsonify({'error': f'Invalid target_os: {target_os}'}), 400
+        # Sanitize output filename
+        safe_output = sanitize_filename(f'polyglot_output.{container}')
+        output = safe_output
     else:
         data = request.get_json() or {}
         cover = data.get('cover', '')
@@ -253,36 +359,91 @@ def api_build():
         encrypt = data.get('encrypt', False)
         fud = data.get('fud', False)
         mime = data.get('mime', False)
-        output = data.get('output', f'polyglot.{container}')
+        # Validate container and OS
+        allowed_containers = {'jpeg','jpg','png','gif','bmp','pdf','zip','docx','xlsx','mp4','webm'}
+        if container not in allowed_containers:
+            return jsonify({'error': f'Invalid container: {container}'}), 400
+        allowed_os = {'windows','macos','linux'}
+        if target_os not in allowed_os:
+            return jsonify({'error': f'Invalid target_os: {target_os}'}), 400
+        output = sanitize_filename(data.get('output', f'polyglot.{container}'))
 
-    if not cover or not os.path.isfile(cover):
+    # Validate paths
+    safe_cover = safe_resolve_path(cover)
+    safe_payload = safe_resolve_path(payload)
+    if not safe_cover or not os.path.isfile(safe_cover):
         return jsonify({'error': 'Invalid cover file'}), 400
-    if not payload or not os.path.isfile(payload):
+    if not safe_payload or not os.path.isfile(safe_payload):
         return jsonify({'error': 'Invalid payload file'}), 400
 
     try:
-        stats = state.builder.build(cover, payload, output, container, encrypt, fud, mime,
+        stats = state.builder.build(safe_cover, safe_payload, output, container, encrypt, fud, mime,
                                      payload_type=payload_type, target_os=target_os)
         state.stats['built'] += 1
         return jsonify(stats)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    finally:
+        # Clean up temp files from multipart uploads
+        if request.content_type and 'multipart' in request.content_type:
+            for tmp_path in [cover, payload]:
+                try:
+                    if tmp_path and tmp_path.startswith(tempfile.gettempdir()):
+                        os.unlink(tmp_path)
+                except: pass
+        # Clean up output file
+        try:
+            if os.path.exists(output): os.unlink(output)
+        except: pass
 
 @app.route('/api/quarantine')
 def api_quarantine():
     """List quarantined files."""
-    meta_path = Path(state.config.quarantine.get("dir", "quarantine")) / "metadata.jsonl"
-    items = []
-    if meta_path.exists():
-        with open(meta_path) as f:
-            for line in f:
-                try:
-                    items.append(json.loads(line.strip()))
-                except:
-                    pass
+    items = state.quarantine.list_quarantined()
     return jsonify({'items': items, 'total': len(items)})
 
+@app.route('/api/quarantine/add', methods=['POST'])
+@require_api_key
+def api_quarantine_add():
+    """Quarantine a file by path."""
+    data = request.get_json() or {}
+    filepath = data.get('path', '')
+    if not filepath:
+        return jsonify({'error': 'Missing path'}), 400
+    safe_path = safe_resolve_path(filepath)
+    if not safe_path or not os.path.exists(safe_path):
+        return jsonify({'error': 'File not found or path blocked'}), 404
+    # Scan the file first
+    findings = state.detector.scan_file(safe_path)
+    sev_map = {'critical': 95, 'high': 80, 'warning': 50, 'info': 20, 'error': 0}
+    max_sev = max((sev_map.get(f.get('severity', 'info'), 0) for f in findings), default=0)
+    max_sev_name = 'CRITICAL' if max_sev >= 90 else 'HIGH' if max_sev >= 70 else 'MEDIUM' if max_sev >= 40 else 'LOW'
+    sorted_f = sorted(findings, key=lambda f: sev_map.get(f.get('severity','info'),0), reverse=True)
+    primary_label = sorted_f[0].get('type','UNKNOWN') if sorted_f else 'UNKNOWN'
+    scan_result = {
+        'label': primary_label, 'confidence': max_sev/100.0,
+        'risk_score': float(max_sev), 'risk_level': max_sev_name,
+        'yara_matches': [], 'detected_types': list({f.get('type','UNKNOWN') for f in findings}),
+    }
+    qid = state.quarantine.quarantine(safe_path, scan_result, force=True)
+    if qid:
+        return jsonify({'quarantine_id': qid, 'file': os.path.basename(filepath)})
+    return jsonify({'error': 'Quarantine failed'}), 500
+
+@app.route('/api/quarantine/delete', methods=['POST'])
+@require_api_key
+def api_quarantine_delete():
+    """Permanently delete a quarantined file."""
+    data = request.get_json() or {}
+    qid = data.get('id', '')
+    if not qid:
+        return jsonify({'error': 'Missing quarantine ID'}), 400
+    if state.quarantine.delete(qid):
+        return jsonify({'deleted': qid})
+    return jsonify({'error': 'Not found'}), 404
+
 @app.route('/api/quarantine/restore', methods=['POST'])
+@require_api_key
 def api_quarantine_restore():
     """Restore a quarantined file."""
     data = request.get_json() or {}
@@ -318,11 +479,20 @@ def api_alerts():
     return jsonify({'alerts': list(state.alerts)[:50]})
 
 @app.route('/api/train', methods=['POST'])
+@require_api_key
 def api_train():
     """Train the ML model."""
     data = request.get_json() or {}
     n_samples = data.get('samples', 50)
     use_gpu = data.get('use_gpu', True)
+
+    # Validate n_samples is a positive integer
+    try:
+        n_samples = int(n_samples)
+        if n_samples < 1 or n_samples > 100000:
+            return jsonify({'error': 'samples must be 1-100000'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'samples must be a positive integer'}), 400
 
     try:
         import subprocess as sp
@@ -365,37 +535,74 @@ def api_train():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/monitor/start', methods=['POST'])
+@require_api_key
 def api_monitor_start():
     """Start directory monitor."""
     data = request.get_json() or {}
     directory = data.get('path', str(Path.home() / "Downloads"))
-    if not os.path.isdir(directory):
-        return jsonify({'error': 'Invalid directory'}), 400
+    directory = os.path.expanduser(directory)
+    safe_dir = safe_resolve_path(directory)
+    if not safe_dir or not os.path.isdir(safe_dir):
+        return jsonify({'error': 'Invalid or blocked directory'}), 400
 
     from engines.monitor import FolderMonitor, HAS_WATCHDOG
     if not HAS_WATCHDOG:
         return jsonify({'error': 'watchdog not installed'}), 500
 
-    # Use threading for non-blocking monitor
+    # Use threading for non-blocking monitor (no QThread in Flask)
     import threading
-    from polyglot_tui import MonitorWorker
+    from polyglot_tui import PolyglotDetector
 
     if state.monitor_running:
         return jsonify({'error': 'Monitor already running'}), 400
 
-    state.monitor_thread = MonitorWorker()
-    state.monitor_thread.alert.connect(lambda a: state.alerts.appendleft(a))
-    state.monitor_thread.stats.connect(lambda s: state.stats.update(s))
-    state.monitor_thread.start_watch(directory)
+    detector = PolyglotDetector()
+    file_hashes = {}
+
+    def _monitor_loop():
+        exts = {'.jpg','.jpeg','.png','.gif','.bmp','.pdf','.doc','.docx',
+                '.zip','.exe','.dll','.scr','.bat','.cmd','.ps1','.vbs',
+                '.js','.hta','.lnk','.elf','.so','.mp4'}
+        while getattr(state, 'monitor_running', False):
+            try:
+                for root, dirs, files in os.walk(safe_dir):
+                    dirs[:] = [d for d in dirs if not d.startswith('.')]
+                    for fname in files:
+                        if not state.monitor_running: return
+                        if os.path.splitext(fname)[1].lower() not in exts: continue
+                        fpath = os.path.join(root, fname)
+                        try:
+                            st = os.stat(fpath); cur = (st.st_mtime, st.st_size)
+                        except: continue
+                        prev = file_hashes.get(fpath)
+                        if prev is None or prev != cur:
+                            file_hashes[fpath] = cur
+                            try:
+                                findings = detector.scan_file(fpath)
+                                crit = [f for f in findings if f['severity'] in ('critical','high')]
+                                if crit:
+                                    state.stats['threats'] += 1
+                                    state.alerts.appendleft({
+                                        'time': time.strftime('%H:%M:%S'),
+                                        'file': fname, 'severity': 'critical',
+                                        'detail': '; '.join(f['detail'] for f in crit[:3])
+                                    })
+                                state.stats['scanned'] += 1
+                            except: pass
+                time.sleep(3)
+            except: time.sleep(5)
+
+    state.monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
+    state.monitor_thread.start()
     state.monitor_running = True
 
     return jsonify({'status': 'started', 'directory': directory})
 
 @app.route('/api/monitor/stop', methods=['POST'])
+@require_api_key
 def api_monitor_stop():
     """Stop directory monitor."""
-    if state.monitor_thread and state.monitor_running:
-        state.monitor_thread.stop_watch()
+    if state.monitor_running:
         state.monitor_running = False
         return jsonify({'status': 'stopped'})
     return jsonify({'error': 'Monitor not running'}), 400
@@ -459,6 +666,8 @@ hr{border-color:#1e2d3d;margin:12px 0}
     <div class="stat green"><div class="icon">&#128737;</div><div class="value" id="s-sanitized">0</div><div class="label">Sanitized</div></div>
     <div class="stat orange"><div class="icon">&#9670;</div><div class="value" id="s-built">0</div><div class="label">Built</div></div>
   </div>
+
+  <div id="alerts" style="margin-top:12px"></div>
 
   <div class="grid">
     <div class="card">
@@ -542,7 +751,7 @@ hr{border-color:#1e2d3d;margin:12px 0}
       <hr>
       <h3>&#128203; YARA Rules</h3>
       <div style="overflow-x:auto">
-        <table id="yara-table"><thead><tr><th>Rule</th><th>Severity</th><th>Description</th></tr></thead><tbody></tbody></table>
+        <table id="builder-yara-table"><thead><tr><th>Rule</th><th>Severity</th><th>Description</th></tr></thead><tbody></tbody></table>
       </div>
     </div>
   </div>
@@ -586,8 +795,8 @@ async function refresh(){
     document.getElementById('s-sanitized').textContent=s.sanitized||0;
     document.getElementById('s-built').textContent=s.built||0;
     const el=document.getElementById('alerts');
-    if(a.alerts&&a.alerts.length){
-      el.innerHTML=a.alerts.map(x=>`<div class="alert ${x.severity||''}">[${x.time||''}] ${x.file||''}: ${x.detail||''}</div>`).join('');
+    if(el&&a.alerts&&a.alerts.length){
+      el.innerHTML=a.alerts.map(x=>`<div class="alert ${x.severity||''}">[${escHtml(x.time||'')}] ${escHtml(x.file||'')}: ${escHtml(x.detail||'')}</div>`).join('');
     }
     document.getElementById('status').innerHTML='&#9679; '+(st.model_loaded?'ML Loaded':'No Model');
     document.getElementById('status').style.color=st.model_loaded?'#22cc55':'#ddaa22';
@@ -683,7 +892,7 @@ async function recoverFiles(){
       let restored=0;
       for(const item of r.items){
         try{await api('quarantine/restore',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({id:item.quarantine_id})});restored++}catch(e){}
+          body:JSON.stringify({id:item.quarantine_id, dest:d})});restored++}catch(e){}
       }
       document.getElementById('results').textContent='Restored '+restored+'/'+r.total+' quarantined files';
       showToast('Restored '+restored+' files','success');
@@ -699,7 +908,7 @@ async function loadYara(){
     const r=await api('yara/rules');
     const tb=document.querySelector('#yara-table tbody');
     if(r.rules&&r.rules.length){
-      tb.innerHTML=r.rules.map(x=>`<tr><td>${x.name}</td><td class="${x.severity==='critical'?'threat':''}">${(x.severity||'').toUpperCase()}</td><td>${x.description||''}</td></tr>`).join('');
+      tb.innerHTML=r.rules.map(x=>`<tr><td>${escHtml(x.name)}</td><td class="${x.severity==='critical'?'threat':''}">${escHtml((x.severity||'').toUpperCase())}</td><td>${escHtml(x.description||'')}</td></tr>`).join('');
     }
   }catch(e){}
 }

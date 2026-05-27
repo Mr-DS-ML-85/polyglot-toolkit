@@ -4,7 +4,7 @@ Moves suspicious files to a secure vault with encrypted filenames,
 metadata logging, restore capability, and auto-expiry.
 """
 
-import os, json, hashlib, shutil, time, logging
+import os, json, hashlib, shutil, time, logging, fcntl
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
@@ -92,12 +92,12 @@ class QuarantineManager:
             logger.error(f"Failed to quarantine {filepath}: {e}")
             return None
 
-        # Record metadata
+        # Record metadata (read size from dest — src is gone after move)
         meta = {
             "quarantine_id": qid,
             "original_path": str(src.resolve()),
             "original_name": src.name,
-            "original_size": src.stat().st_size if src.exists() else 0,
+            "original_size": dest.stat().st_size if dest.exists() else 0,
             "quarantine_path": str(dest.resolve()),
             "timestamp": datetime.now().isoformat(),
             "label": scan_result.get("label", "unknown"),
@@ -168,16 +168,21 @@ class QuarantineManager:
         for entry in entries:
             try:
                 ts = datetime.fromisoformat(entry["timestamp"])
-                if ts < cutoff and not entry.get("restored"):
+                if ts < cutoff and not entry.get("restored") and not entry.get("deleted"):
                     qpath = Path(entry["quarantine_path"])
                     if qpath.exists():
                         qpath.unlink()
                     entry["expired"] = True
-                    self._update_meta(entry["quarantine_id"], entry)
                     purged += 1
             except Exception:
                 continue
+        # Batch write once instead of per-entry
         if purged:
+            with open(self.meta_path, "w", encoding="utf-8") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                for entry in entries:
+                    f.write(json.dumps(entry) + "\n")
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
             logger.info(f"Auto-purged {purged} expired quarantine entries")
         return purged
 
@@ -225,7 +230,9 @@ class QuarantineManager:
 
     def _append_meta(self, meta: Dict):
         with open(self.meta_path, "a", encoding="utf-8") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             f.write(json.dumps(meta) + "\n")
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     def _read_all_meta(self) -> List[Dict]:
         if not self.meta_path.exists():
@@ -243,7 +250,11 @@ class QuarantineManager:
 
     def _find_meta(self, qid: str) -> Optional[Dict]:
         """Find quarantine entry by ID. Supports partial/prefix matching."""
+        if not qid:
+            return None
         qid = qid.strip().lower()
+        if not qid:
+            return None
         entries = self._read_all_meta()
         # Exact match first
         for entry in entries:
@@ -255,7 +266,7 @@ class QuarantineManager:
             return matches[0]
         if len(matches) > 1:
             logger.warning(f"Ambiguous quarantine ID '{qid}' — {len(matches)} matches. Use more characters.")
-            return matches[0]  # Return first match
+            return None  # Refuse to guess — user must provide more specific ID
         return None
 
     def _update_meta(self, qid: str, updated: Dict):
@@ -265,8 +276,10 @@ class QuarantineManager:
                 entries[i] = updated
                 break
         with open(self.meta_path, "w", encoding="utf-8") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             for entry in entries:
                 f.write(json.dumps(entry) + "\n")
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     def _current_size(self) -> int:
         return sum(f.stat().st_size for f in self.quarantine_dir.iterdir()
@@ -275,11 +288,23 @@ class QuarantineManager:
     def _purge_oldest(self, count: int = 10):
         entries = sorted(self._read_all_meta(),
                          key=lambda e: e.get("timestamp", ""))
-        purged = 0
+        purged_ids = []
         for entry in entries:
-            if purged >= count:
+            if len(purged_ids) >= count:
                 break
             qpath = Path(entry["quarantine_path"])
             if qpath.exists():
                 qpath.unlink()
-                purged += 1
+                entry["purged"] = True
+                purged_ids.append(entry.get("quarantine_id"))
+        # Batch update metadata for all purged entries
+        if purged_ids:
+            all_entries = self._read_all_meta()
+            for e in all_entries:
+                if e.get("quarantine_id") in purged_ids:
+                    e["purged"] = True
+            with open(self.meta_path, "w", encoding="utf-8") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                for entry in all_entries:
+                    f.write(json.dumps(entry) + "\n")
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
