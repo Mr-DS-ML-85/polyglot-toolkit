@@ -271,6 +271,26 @@ class PolyglotDetector:
             return elf_type in (1, 2, 3, 4)
         except: return False
 
+    @staticmethod
+    def detect_format(data, filepath=''):
+        """Detect the format of binary data by magic bytes."""
+        if not data: return 'unknown'
+        if data[:2] == b'\xff\xd8': return 'JPEG'
+        if data[:8] == b'\x89PNG\r\n\x1a\n': return 'PNG'
+        if data[:6] in (b'GIF87a', b'GIF89a'): return 'GIF'
+        if data[:4] == b'%PDF': return 'PDF'
+        if data[:2] == b'PK': return 'ZIP'
+        if b'ftyp' in data[:20]: return 'MP4'
+        if data[:2] == b'MZ': return 'PE/EXE'
+        if data[:4] == b'\x7fELF': return 'ELF'
+        if data[:4] == b'Rar!': return 'RAR'
+        if data[:6] == b'7z\xbc\xaf\x27\x1c': return '7Z'
+        if data[:2] == b'\x1f\x8b': return 'GZIP'
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext in ('.jpg','.jpeg'): return 'JPEG (by ext)'
+        if ext == '.png': return 'PNG (by ext)'
+        return f'unknown ({data[:4].hex()})'
+
     def scan_file(self, fp):
         findings=[]
         try:
