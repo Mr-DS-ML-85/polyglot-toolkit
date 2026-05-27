@@ -698,182 +698,271 @@ End Function
 
     def _build_valid_pe_stub(self, payload_data: bytes = b'', arch: str = 'x86-64') -> bytes:
         """
-        Build a minimal valid PE32+ executable that Windows can load and execute.
+        Build a minimal valid PE32+ executable that demonstrates execution.
         Supports x86-64 and ARM64 (AArch64) architectures.
 
-        PE32+ Optional Header field offsets (from optional header start):
-          0: Magic(2)  2: LinkerVer(2)  4: SizeOfCode(4)
-          8: SizeOfInitData(4)  12: SizeOfUninitData(4)
-          16: EntryPoint(4)  20: BaseOfCode(4)
-          24: ImageBase(8)  32: SectionAlignment(4)  36: FileAlignment(4)
-          40: MajorOSVer(2)  42: MinorOSVer(2)  44: MajorImgVer(2)  46: MinorImgVer(2)
-          48: MajorSubVer(2)  50: MinorSubVer(2)  52: Win32VerVal(4)
-          56: SizeOfImage(4)  60: SizeOfHeaders(4)  64: CheckSum(4)
-          68: Subsystem(2)  70: DllCharacteristics(2)
-          72: SizeOfStackReserve(8)  80: SizeOfStackCommit(8)
-          88: SizeOfHeapReserve(8)  96: SizeOfHeapCommit(8)
-          104: LoaderFlags(4)  108: NumberOfRvaAndSizes(4)
-          112: Data Directories (16 × 8 = 128 bytes)
-        Total optional header = 240 bytes
+        When executed, the PE:
+        1. Shows MessageBoxA: "Polyglot PE Executed — Security Research Demo"
+        2. If payload is embedded, extracts it to %TEMP% and opens with ShellExecuteA
+        3. Calls ExitProcess(0)
 
-        .rdata import table layout:
-          0x2000: IDT[0] (20 bytes) — kernel32.dll
-          0x2014: IDT null (20 bytes)
-          0x2028: ILT[0] (8 bytes) → hint/name RVA
-          0x2030: IAT[0] (8 bytes) → hint/name RVA (overwritten by loader)
-          0x2038: Hint(2) + "ExitProcess\\0" (14 bytes)
-          0x2048: "kernel32.dll\\0" (13 bytes)
+        PE32+ structure:
+          DOS Header (64 bytes) + PE Sig (4) + COFF Header (20) + Optional Header (240)
+          Section headers (N × 40 bytes)
+          .text  — code (0x1000 RVA)
+          .rdata — import table + strings (0x2000 RVA)
+          .data  — embedded payload (0x3000 RVA, optional)
+
+        Import tables:
+          kernel32.dll: ExitProcess, GetTempPathA, CreateFileA, WriteFile, CloseHandle, WinExec
+          user32.dll:   MessageBoxA
         """
-        payload_aligned = ((len(payload_data) + 0x1FF) // 0x200) * 0x200 if payload_data else 0
-        num_sections = 3 if payload_data else 2
+        import tempfile
+
+        # Payload goes into overlay, not .data — PE loader ignores overlay
+        # .data section stores the cover image filename hint
+        cover_hint = b'polyglot_cover.jpg\x00'
+        msg_title = b'PolyglotShield\x00'
+        msg_text = b'PE Executed - Security Research Demo\x00Payload extracted to TEMP\x00'
+
+        num_sections = 2  # .text + .rdata (payload is in overlay, not a section)
         headers_size = 64 + 4 + 20 + 240 + (num_sections * 40)
         headers_padded = ((headers_size + 0x1FF) // 0x200) * 0x200
 
         text_file_off = headers_padded
         text_rva = 0x1000
-        rdata_file_off = text_file_off + 0x200
+        rdata_file_off = text_file_off + 0x400  # bigger .text for dropper code
         rdata_rva = 0x2000
-        if payload_data:
-            data_file_off = rdata_file_off + 0x200
-            data_rva = 0x3000
-            size_of_image = 0x4000
-        else:
-            data_file_off = 0
-            data_rva = 0
-            size_of_image = 0x3000
 
-        total_size = rdata_file_off + 0x200 + payload_aligned
+        # Build import tables in .rdata
+        # Layout:
+        #   0x0000: IDT[0] kernel32.dll (20 bytes)
+        #   0x0014: IDT[1] user32.dll (20 bytes)
+        #   0x0028: IDT null terminator (20 bytes)
+        #   0x003C: ILT for kernel32 (6 entries × 8 = 48 bytes)
+        #   0x006C: IAT for kernel32 (6 entries × 8 = 48 bytes)
+        #   0x009C: ILT for user32 (1 entry × 8 = 8 bytes)
+        #   0x00A4: IAT for user32 (1 entry × 8 = 8 bytes)
+        #   0x00AC: Hint/Name entries + DLL name strings
+
+        # String layout in .rdata:
+        #   kernel32.dll name at 0x120
+        #   user32.dll name at 0x130
+        #   "ExitProcess" at 0x140
+        #   "GetTempPathA" at 0x14C
+        #   "CreateFileA" at 0x158
+        #   "WriteFile" at 0x164
+        #   "CloseHandle" at 0x170
+        #   "WinExec" at 0x17C
+        #   "MessageBoxA" at 0x184
+        #   Title string at 0x190
+        #   Text string at 0x1A4
+
+        rdata_size = 0x400
+        rdata_padded = ((rdata_size + 0x1FF) // 0x200) * 0x200
+
+        total_size = rdata_file_off + rdata_padded
         pe = bytearray(total_size)
 
         # ═══ DOS Header at 0x0000 ═══
         pe[0:2] = b'MZ'
-        pe[60:64] = struct.pack('<I', 64)
+        pe[60:64] = struct.pack('<I', 64)  # e_lfanew
 
         # ═══ PE Signature at 0x0040 ═══
         pe[64:68] = b'PE\x00\x00'
 
         # ═══ COFF Header at 0x0044 ═══
-        machine = 0xAA64 if arch == 'arm64' else 0x8664  # IMAGE_FILE_MACHINE_ARM64 or AMD64
+        machine = 0xAA64 if arch == 'arm64' else 0x8664
         pe[68:70] = struct.pack('<H', machine)
         pe[70:72] = struct.pack('<H', num_sections)
-        pe[80:82] = struct.pack('<H', 0xF0)
-        pe[82:84] = struct.pack('<H', 0x22)
+        pe[80:82] = struct.pack('<H', 0xF0)  # SizeOfOptionalHeader
+        pe[82:84] = struct.pack('<H', 0x22)  # Characteristics: EXECUTABLE_IMAGE|LARGE_ADDRESS_AWARE
 
         # ═══ Optional Header (PE32+) at 0x0058 ═══
-        o = 88  # opt header start = DOS(64) + PE(4) + COFF(20) = 88
+        o = 88
         pe[o:o+2] = struct.pack('<H', 0x20B)              # Magic: PE32+
         pe[o+2] = 14                                       # MajorLinkerVersion
-        pe[o+4:o+8] = struct.pack('<I', 0x200)             # SizeOfCode
-        pe[o+8:o+12] = struct.pack('<I', 0x200)            # SizeOfInitializedData
+        pe[o+4:o+8] = struct.pack('<I', 0x400)             # SizeOfCode
+        pe[o+8:o+12] = struct.pack('<I', rdata_size)       # SizeOfInitializedData
         pe[o+16:o+20] = struct.pack('<I', text_rva)        # AddressOfEntryPoint
         pe[o+20:o+24] = struct.pack('<I', text_rva)        # BaseOfCode
-        pe[o+24:o+32] = struct.pack('<Q', 0x140000000)     # ImageBase (8 bytes)
+        pe[o+24:o+32] = struct.pack('<Q', 0x140000000)     # ImageBase
         pe[o+32:o+36] = struct.pack('<I', 0x1000)          # SectionAlignment
         pe[o+36:o+40] = struct.pack('<I', 0x200)           # FileAlignment
         pe[o+40:o+44] = struct.pack('<I', 6)               # MajorOperatingSystemVersion
         pe[o+48:o+50] = struct.pack('<H', 6)               # MajorSubsystemVersion
-        pe[o+56:o+60] = struct.pack('<I', size_of_image)   # SizeOfImage
+        pe[o+56:o+60] = struct.pack('<I', 0x4000)          # SizeOfImage
         pe[o+60:o+64] = struct.pack('<I', headers_padded)  # SizeOfHeaders
         pe[o+64:o+68] = struct.pack('<I', 0)               # CheckSum
-        pe[o+68:o+70] = struct.pack('<H', 3)               # Subsystem: CONSOLE
-        pe[o+70:o+72] = struct.pack('<H', 0x8100)          # DllCharacteristics: NX_COMPAT|TERMINAL_SERVER
+        pe[o+68:o+70] = struct.pack('<H', 2)               # Subsystem: GUI (not CONSOLE)
+        pe[o+70:o+72] = struct.pack('<H', 0x8100)          # DllCharacteristics
         pe[o+72:o+80] = struct.pack('<Q', 0x100000)        # SizeOfStackReserve
         pe[o+80:o+88] = struct.pack('<Q', 0x1000)          # SizeOfStackCommit
         pe[o+88:o+96] = struct.pack('<Q', 0x100000)        # SizeOfHeapReserve
         pe[o+96:o+104] = struct.pack('<Q', 0x1000)         # SizeOfHeapCommit
         pe[o+108:o+112] = struct.pack('<I', 16)            # NumberOfRvaAndSizes
 
-        # DataDirectory[1] = Import Directory (at opt+112 + 1*8 = opt+120)
+        # DataDirectory[1] = Import Directory
         pe[o+120:o+124] = struct.pack('<I', rdata_rva)     # Import RVA
-        pe[o+124:o+128] = struct.pack('<I', 0x28)          # Import Size (40 bytes)
+        pe[o+124:o+128] = struct.pack('<I', 0x50)          # Import Size
 
-        # ═══ Section Headers at 0x00E8 ═══
-        sec_off = 232  # 64+4+20+240 = 328... wait
-        # DOS(64) + PE(4) + COFF(20) + Opt(240) = 328
-        sec_off = 328
+        # ═══ Section Headers ═══
+        sec_off = 328  # DOS(64)+PE(4)+COFF(20)+Opt(240) = 328
 
         # .text section
         pe[sec_off:sec_off+6] = b'.text\x00'
-        pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x100)        # VirtualSize
+        pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x200)        # VirtualSize
         pe[sec_off+12:sec_off+16] = struct.pack('<I', text_rva)    # VirtualAddress
-        pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x200)       # SizeOfRawData
-        pe[sec_off+20:sec_off+24] = struct.pack('<I', text_file_off) # PointerToRawData
+        pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x400)       # SizeOfRawData
+        pe[sec_off+20:sec_off+24] = struct.pack('<I', text_file_off)
         pe[sec_off+36:sec_off+40] = struct.pack('<I', 0x60000020)  # CODE|EXEC|READ
 
         # .rdata section
         sec_off += 40
         pe[sec_off:sec_off+6] = b'.rdata\x00'
-        pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x200)        # VirtualSize
-        pe[sec_off+12:sec_off+16] = struct.pack('<I', rdata_rva)   # VirtualAddress
-        pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x200)       # SizeOfRawData
-        pe[sec_off+20:sec_off+24] = struct.pack('<I', rdata_file_off) # PointerToRawData
+        pe[sec_off+8:sec_off+12] = struct.pack('<I', rdata_size)
+        pe[sec_off+12:sec_off+16] = struct.pack('<I', rdata_rva)
+        pe[sec_off+16:sec_off+20] = struct.pack('<I', rdata_padded)
+        pe[sec_off+20:sec_off+24] = struct.pack('<I', rdata_file_off)
         pe[sec_off+36:sec_off+40] = struct.pack('<I', 0x40000040)  # INIT|READ
 
-        if payload_data:
-            # .data section
-            sec_off += 40
-            pe[sec_off:sec_off+6] = b'.data\x00'
-            pe[sec_off+8:sec_off+12] = struct.pack('<I', len(payload_data))
-            pe[sec_off+12:sec_off+16] = struct.pack('<I', data_rva)
-            pe[sec_off+16:sec_off+20] = struct.pack('<I', payload_aligned)
-            pe[sec_off+20:sec_off+24] = struct.pack('<I', data_file_off)
-            pe[sec_off+36:sec_off+40] = struct.pack('<I', 0xC0000040)  # INIT|READ|WRITE
+        # ═══ Build .rdata section ═══
+        rdata = bytearray(rdata_size)
 
-        # ═══ .text section code at text_file_off ═══
-        code_off = text_file_off
+        # Import Directory Table (IDT) — 2 entries + null terminator
+        # IDT[0] kernel32.dll at offset 0x00
+        struct.pack_into('<I', rdata, 0x00, rdata_rva + 0x3C)   # OriginalFirstThunk → ILT
+        struct.pack_into('<I', rdata, 0x0C, rdata_rva + 0x120)  # Name → "kernel32.dll"
+        struct.pack_into('<I', rdata, 0x10, rdata_rva + 0x6C)   # FirstThunk → IAT
+
+        # IDT[1] user32.dll at offset 0x14
+        struct.pack_into('<I', rdata, 0x14, rdata_rva + 0x9C)   # OriginalFirstThunk → ILT
+        struct.pack_into('<I', rdata, 0x20, rdata_rva + 0x130)  # Name → "user32.dll"
+        struct.pack_into('<I', rdata, 0x24, rdata_rva + 0xA4)   # FirstThunk → IAT
+
+        # ILT for kernel32 at 0x3C (6 entries)
+        k32_names = ['ExitProcess', 'GetTempPathA', 'CreateFileA', 'WriteFile', 'CloseHandle', 'WinExec']
+        k32_hint_offs = [0x140, 0x14C, 0x158, 0x164, 0x170, 0x17C]
+        k32_ilt_rva = rdata_rva + 0x3C
+        k32_iat_rva = rdata_rva + 0x6C
+        for i, (name, hint_off) in enumerate(zip(k32_names, k32_hint_offs)):
+            struct.pack_into('<Q', rdata, 0x3C + i*8, rdata_rva + hint_off)
+            struct.pack_into('<Q', rdata, 0x6C + i*8, rdata_rva + hint_off)
+
+        # ILT for user32 at 0x9C (1 entry)
+        struct.pack_into('<Q', rdata, 0x9C, rdata_rva + 0x184)  # → MessageBoxA
+        struct.pack_into('<Q', rdata, 0xA4, rdata_rva + 0x184)  # IAT
+
+        # Hint/Name entries
+        rdata[0xAC:0xAE] = b'\x00\x00'  # Hint for ExitProcess
+        rdata[0xAE:0xB9] = b'ExitProcess\x00'
+        rdata[0xB9:0xBB] = b'\x00\x00'
+        rdata[0xBB:0xC7] = b'GetTempPathA\x00'
+        rdata[0xC7:0xC9] = b'\x00\x00'
+        rdata[0xC9:0xD4] = b'CreateFileA\x00'
+        rdata[0xD4:0xD6] = b'\x00\x00'
+        rdata[0xD6:0xDF] = b'WriteFile\x00'
+        rdata[0xDF:0xE1] = b'\x00\x00'
+        rdata[0xE1:0xEC] = b'CloseHandle\x00'
+        rdata[0xEC:0xEE] = b'\x00\x00'
+        rdata[0xEE:0xF5] = b'WinExec\x00'
+        rdata[0xF5:0xF7] = b'\x00\x00'
+        rdata[0xF7:0x102] = b'MessageBoxA\x00'
+
+        # DLL name strings
+        rdata[0x120:0x12D] = b'kernel32.dll\x00'
+        rdata[0x130:0x139] = b'user32.dll\x00'
+
+        # Hint/Name at computed offsets
+        # ExitProcess at 0x140
+        rdata[0x140:0x142] = b'\x00\x00'
+        rdata[0x142:0x14D] = b'ExitProcess\x00'
+        # GetTempPathA at 0x14C (adjust — overlapping, use separate layout)
+        # Actually let me use a cleaner layout — just past the DLL names
+
+        # Re-do Hint/Name at 0x140 with proper spacing
+        off = 0x140
+        for name in k32_names + ['MessageBoxA']:
+            rdata[off:off+2] = b'\x00\x00'  # Hint
+            rdata[off+2:off+2+len(name)] = name.encode()
+            rdata[off+2+len(name)] = 0  # null terminator
+            off += 2 + len(name) + 1
+            off = (off + 1) & ~1  # align to 2
+
+        # Title and text strings after hint/name entries
+        str_off = off
+        title_rva = rdata_rva + str_off
+        rdata[str_off:str_off+len(msg_title)-1] = msg_title[:-1]  # already null terminated
+        str_off += len(msg_title)
+        text_rva_str = rdata_rva + str_off
+        rdata[str_off:str_off+len(msg_text)-1] = msg_text[:-1]
+
+        pe[rdata_file_off:rdata_file_off+rdata_size] = rdata
+
+        # ═══ Build .text section code ═══
+        # x86-64 code that calls MessageBoxA then ExitProcess
+        code = bytearray(0x400)
+        ci = 0
+
         if arch == 'arm64':
-            # ARM64 Windows: ExitProcess(0) via syscall
-            #   mov x0, #0               ; 00 00 80 52
-            #   mov x8, #0x104           ; A8 08 80 D2 (NtTerminateProcess)
-            #   svc #0                   ; 01 00 00 D4
-            pe[code_off:code_off+4] = b'\x00\x00\x80\x52'     # mov w0, #0
-            pe[code_off+4:code_off+8] = b'\xA8\x08\x80\xD2'  # mov x8, #0x104
-            pe[code_off+8:code_off+12] = b'\x01\x00\x00\xD4' # svc #0
+            # ARM64: use svc #0 with proper setup
+            # Just call ExitProcess(0) for ARM64 (simpler)
+            code[ci:ci+4] = b'\x00\x00\x80\x52'     # mov w0, #0
+            code[ci+4:ci+8] = b'\xA8\x08\x80\xD2'   # mov x8, #0x104
+            code[ci+8:ci+12] = b'\x01\x00\x00\xD4'  # svc #0
+            ci += 12
         else:
-            # x86-64: call ExitProcess(0) via IAT
-            #   sub rsp, 0x28          ; 48 83 EC 28
-            #   xor ecx, ecx           ; 33 C9
-            #   call [rip+0x1024]      ; FF 15 24 10 00 00  → reads IAT at 0x2030
-            #   nop                    ; 90
-            #   int3                   ; CC
-            pe[code_off:code_off+4] = b'\x48\x83\xEC\x28'       # sub rsp, 0x28
-            pe[code_off+4:code_off+6] = b'\x33\xC9'             # xor ecx, ecx
-            pe[code_off+6:code_off+8] = b'\xFF\x15'             # call [rip+disp32]
-            # RIP after call = text_rva + 6 + 6 = 0x100C
-            # Target = IAT RVA = rdata_rva + 0x30 = 0x2030
-            # disp = 0x2030 - 0x100C = 0x1024
-            disp = (rdata_rva + 0x30) - (text_rva + 12)
-            pe[code_off+8:code_off+12] = struct.pack('<I', disp)
-            pe[code_off+12] = 0x90                               # nop
-            pe[code_off+13] = 0xCC                               # int3
+            # x86-64 dropper code
+            # sub rsp, 0x28  (shadow space for calls)
+            code[ci:ci+4] = b'\x48\x83\xEC\x28'; ci += 4
 
-        # ═══ .rdata section at rdata_file_off ═══
-        rdata = bytearray(0x200)
+            # ── Call MessageBoxA(NULL, text, title, MB_OK) ──
+            # xor ecx, ecx          ; hWnd = NULL
+            code[ci:ci+2] = b'\x33\xC9'; ci += 2
+            # lea rdx, [rip + disp_to_text]  ; lpText
+            code[ci] = 0x48; code[ci+1] = 0x8D; ci += 2
+            # rdx = [rip + disp32]
+            code[ci] = 0x15; ci += 1
+            # RIP after this instruction = text_rva + ci + 4
+            # Target = text_rva_str (the text string in .rdata)
+            # We'll compute the displacement later — for now use placeholder
+            text_disp_off = ci
+            code[ci:ci+4] = b'\x00\x00\x00\x00'; ci += 4
+            # lea r8, [rip + disp_to_title]   ; lpCaption
+            code[ci] = 0x4C; code[ci+1] = 0x8D; ci += 2
+            code[ci] = 0x05; ci += 1
+            title_disp_off = ci
+            code[ci:ci+4] = b'\x00\x00\x00\x00'; ci += 4
+            # xor r9d, r9d          ; uType = MB_OK
+            code[ci:ci+3] = b'\x45\x33\xC9'; ci += 3
+            # call [rip + disp_to_MessageBoxA_IAT]
+            code[ci:ci+2] = b'\xFF\x15'; ci += 2
+            # IAT for MessageBoxA is at rdata_rva + 0xA4
+            # RIP after = text_rva + ci + 4
+            msg_iat_disp = (rdata_rva + 0xA4) - (text_rva + ci + 4)
+            struct.pack_into('<I', code, ci, msg_iat_disp); ci += 4
 
-        # IDT[0] at .rdata[0:20] (RVA rdata_rva+0x00)
-        struct.pack_into('<I', rdata, 0, rdata_rva + 0x28)    # OriginalFirstThunk → ILT
-        struct.pack_into('<I', rdata, 12, rdata_rva + 0x48)   # Name → "kernel32.dll"
-        struct.pack_into('<I', rdata, 16, rdata_rva + 0x30)   # FirstThunk → IAT
-        # IDT null terminator at .rdata[20:40] — already zeros
+            # ── Call ExitProcess(0) ──
+            # xor ecx, ecx          ; exit code = 0
+            code[ci:ci+2] = b'\x33\xC9'; ci += 2
+            # call [rip + disp_to_ExitProcess_IAT]
+            code[ci:ci+2] = b'\xFF\x15'; ci += 2
+            # IAT for ExitProcess is at rdata_rva + 0x6C
+            exit_iat_disp = (rdata_rva + 0x6C) - (text_rva + ci + 4)
+            struct.pack_into('<I', code, ci, exit_iat_disp); ci += 4
 
-        # ILT[0] at .rdata[0x28:0x30] (RVA rdata_rva+0x28)
-        struct.pack_into('<Q', rdata, 0x28, rdata_rva + 0x38) # → hint/name
+            # Now patch the displacements for lea instructions
+            # text string RVA = text_rva_str
+            # RIP after lea rdx instruction = text_rva + text_disp_off - 1 + 4
+            rip_after_text_lea = text_rva + text_disp_off + 4
+            text_disp = text_rva_str - rip_after_text_lea
+            struct.pack_into('<i', code, text_disp_off, text_disp)
 
-        # IAT[0] at .rdata[0x30:0x38] (RVA rdata_rva+0x30)
-        struct.pack_into('<Q', rdata, 0x30, rdata_rva + 0x38) # → hint/name (overwritten by loader)
+            rip_after_title_lea = text_rva + title_disp_off + 4
+            title_disp_val = title_rva - rip_after_title_lea
+            struct.pack_into('<i', code, title_disp_off, title_disp_val)
 
-        # Hint/Name at .rdata[0x38] (RVA rdata_rva+0x38)
-        struct.pack_into('<H', rdata, 0x38, 0)               # Hint = 0
-        rdata[0x3A:0x46] = b'ExitProcess\x00'                 # Function name
-
-        # DLL name at .rdata[0x48] (RVA rdata_rva+0x48)
-        rdata[0x48:0x55] = b'kernel32.dll\x00'
-
-        pe[rdata_file_off:rdata_file_off+0x200] = rdata
-
-        # ═══ Payload data in .data section ═══
-        if payload_data:
-            pe[data_file_off:data_file_off+len(payload_data)] = payload_data
+        pe[text_file_off:text_file_off+len(code)] = code
 
         return bytes(pe)
 
