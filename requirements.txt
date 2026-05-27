@@ -23,3 +23,7 @@ watchdog>=3.0
 
 # Network
 requests>=2.31
+
+# ONNX export (optional — for model deployment)
+# onnxruntime>=1.16
+# onnxmltools>=1.12
