@@ -2075,7 +2075,18 @@ class PolyglotDetector:
                     '.md', '.txt', '.rst', '.csv', '.json', '.xml', '.yaml', '.yml',
                     '.toml', '.ini', '.cfg', '.conf', '.log', '.sql', '.r', '.R',
                     '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.rs', '.swift',
-                    '.kt', '.scala', '.ex', '.exs', '.erl', '.hs', '.ml', '.clj'}
+                    '.kt', '.scala', '.ex', '.exs', '.erl', '.hs', '.ml', '.clj',
+                    # ML model files — binary, will always have false positive sigs
+                    '.cbm', '.onnx', '.bin', '.model', '.pkl', '.pt', '.pth', '.gguf',
+                    '.h5', '.pb', '.tflite', '.safetensors', '.joblib',
+                    # Compiled/shared libraries
+                    '.so', '.dll', '.dylib', '.a', '.lib', '.o', '.obj',
+                    # Databases
+                    '.db', '.sqlite', '.sqlite3', '.mdb',
+                    # Fonts
+                    '.ttf', '.otf', '.woff', '.woff2',
+                    # Compiled bytecode
+                    '.pyc', '.pyo', '.class', '.wasm'}
 
         # Script patterns — only check in TRAILING data, not entire file
         SCRIPT_SIGS = {
@@ -2085,10 +2096,10 @@ class PolyglotDetector:
             'PYTHON': b'#!/usr/bin/env python', 'APPLESCRIPT': b'osascript',
         }
         # Executable patterns — check anywhere but validate headers
+        # NOTE: LNK removed — \x4c\x00\x00\x00 is too common in binary files (false positives)
         EXE_SIGS = {
-            'PE/EXE': b'MZ', 'ELF': b'\x7fELF', 'LNK': b'\x4c\x00\x00\x00',
+            'PE/EXE': b'MZ', 'ELF': b'\x7fELF',
             'CLASS': b'\xca\xfe\xba\xbe', 'MACHO': b'\xfe\xed\xfa',
-            'DOTNET': b'\x00\x00\x00\x00\x4d\x5a',
         }
         # Non-exe patterns safe to check anywhere
         OTHER_SIGS = {
@@ -2123,8 +2134,16 @@ class PolyglotDetector:
                     is_valid = self._validate_pe(data, off)
                 elif sig == b'\x7fELF':
                     is_valid = self._validate_elf(data, off)
+                elif sig == b'\xca\xfe\xba\xbe':
+                    # Java CLASS — validate: major version 45-67, minor 0-65535
+                    is_valid = (off + 8 <= len(data) and
+                                45 <= struct.unpack_from('>H', data, off+6)[0] <= 67)
+                elif sig == b'\xfe\xed\xfa':
+                    # Mach-O — validate: magic + cputype check
+                    is_valid = (off + 12 <= len(data) and
+                                struct.unpack_from('<I', data, off)[0] in (0xFEEDFACF, 0xFEEDFACE))
                 else:
-                    is_valid = True
+                    is_valid = False  # Unknown sig — don't flag
                 if is_valid:
                     findings.append({'type':'HIDDEN_SIG','detail':f'{name} @ 0x{off:X}',
                         'severity':'critical','offset':off})

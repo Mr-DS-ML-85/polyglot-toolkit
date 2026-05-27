@@ -416,15 +416,9 @@ def _build_default_rules() -> List[YaraRule]:
             rb"Run\s*\(\s*['\"])",
         )],
     ))
-    rules.append(YaraRule(
-        name="LNK_In_Media", severity="critical",
-        description="Windows shortcut (.lnk) embedded in file",
-        patterns=[b"\x4c\x00\x00\x00"],
-        condition_fn=lambda d: (
-            d[:4] != b"\x4c\x00\x00\x00" and
-            b"\x4c\x00\x00\x00" in d[20:1000]
-        ),
-    ))
+    # LNK rule REMOVED — \x4c\x00\x00\x00 is too common in binary files
+    # LNK files are not executables; this pattern causes massive false positives
+    # on model files, databases, fonts, and any binary with null padding
     rules.append(YaraRule(
         name="Office_Macro_In_ZIP", severity="critical",
         description="Office document with VBA macro (macro-enabled document in archive)",

@@ -72,7 +72,7 @@ POLYGLOT_INDICATORS = {
     "vbs_in_media":      (b"\xff\xd8", b"CreateObject"),
     "ps1_in_media":      (b"\xff\xd8", b"powershell"),
     "hta_in_media":      (b"\xff\xd8", b"<hta:"),
-    "lnk_in_media":      (b"\xff\xd8", b"\x4c\x00\x00\x00"),
+    # lnk_in_media REMOVED — \x4c\x00\x00\x00 is too common in binaries
 }
 
 FEATURE_NAMES_CACHE: Optional[List[str]] = None
