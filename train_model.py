@@ -76,12 +76,13 @@ def train(csv_path, task_type="GPU", output="models/polyglot_shield.cbm"):
     print(f"\n[*] Training CatBoost ({task_type})...")
     config = {
         "task_type": task_type,
-        "iterations": 1500,
-        "learning_rate": 0.03,
+        "iterations": 2000,
+        "learning_rate": 0.02,
         "depth": 8,
-        "l2_leaf_reg": 5,
-        "early_stopping_rounds": 100,
-        "auto_class_weights": "Balanced",  # Auto-balance classes
+        "l2_leaf_reg": 3,
+        "early_stopping_rounds": 200,
+        "verbose": 50,
+        "auto_class_weights": "Balanced",
     }
 
     model = PolyglotModel(config)

@@ -35,23 +35,22 @@ class PolyglotModel:
     def _build(self) -> CatBoostClassifier:
         c = self.config
         params = {
-            "iterations": c.get("iterations", 1200),
-            "learning_rate": c.get("learning_rate", 0.04),
+            "iterations": c.get("iterations", 2000),
+            "learning_rate": c.get("learning_rate", 0.02),
             "depth": c.get("depth", 8),
-            "l2_leaf_reg": c.get("l2_leaf_reg", 5),
+            "l2_leaf_reg": c.get("l2_leaf_reg", 3),
             "border_count": c.get("border_count", 254),
             "random_seed": c.get("random_seed", 42),
             "eval_metric": c.get("eval_metric", "Logloss"),
             "task_type": c.get("task_type", "GPU"),
             "devices": "0",
-            "verbose": c.get("verbose", 0),
-            "early_stopping_rounds": c.get("early_stopping_rounds", 80),
+            "verbose": c.get("verbose", 50),
+            "early_stopping_rounds": c.get("early_stopping_rounds", 200),
             "loss_function": "Logloss",
             "max_ctr_complexity": 4,
             "boosting_type": "Plain",
             "bootstrap_type": "Bayesian",
             "bagging_temperature": 0.8,
-            "od_type": "Iter",
             "allow_writing_files": False,
         }
         cw = c.get("class_weights")
