@@ -118,6 +118,38 @@ def find_marker(data: bytes, marker: bytes) -> int:
     return data.rfind(marker)
 
 
+def _validate_pe_at(data: bytes, pos: int) -> bool:
+    """Validate that MZ at pos is a real PE header (not random bytes).
+    Checks for PE\x00\x00 signature at e_lfanew offset."""
+    try:
+        if pos + 64 > len(data):
+            return False
+        e_lfanew = struct.unpack_from('<I', data, pos + 60)[0]
+        pe_sig_pos = pos + e_lfanew
+        if pe_sig_pos + 4 > len(data):
+            return False
+        return data[pe_sig_pos:pe_sig_pos + 4] == b'PE\x00\x00'
+    except Exception:
+        return False
+
+
+def _validate_elf_at(data: bytes, pos: int) -> bool:
+    """Validate that ELF magic at pos has valid header structure."""
+    try:
+        if pos + 20 > len(data):
+            return False
+        elf_class = data[pos + 4]
+        if elf_class not in (1, 2):
+            return False
+        elf_data = data[pos + 5]
+        if elf_data not in (1, 2):
+            return False
+        elf_type = struct.unpack_from('<H' if elf_data == 1 else '>H', data, pos + 16)[0]
+        return elf_type in (1, 2, 3, 4)
+    except Exception:
+        return False
+
+
 def scan_file(filepath: str, verbose: bool = False) -> list:
     """
     Scan a file for polyglot indicators.
@@ -237,13 +269,20 @@ def scan_file(filepath: str, verbose: bool = False) -> list:
                 fmt = FORMAT_MARKERS[declared_format]
                 marker_pos = find_marker(data, fmt['end_marker'])
                 if marker_pos != -1 and pos < marker_pos:
-                    # It's before the end marker — could be a false positive
-                    # Only flag if it's a full MZ/ELF header
-                    if sig_bytes in (b'MZ', b'\x7fELF'):
+                    # Validate it's a REAL PE/ELF header, not random bytes
+                    is_valid = False
+                    if sig_bytes == b'MZ':
+                        is_valid = _validate_pe_at(data, pos)
+                    elif sig_bytes == b'\x7fELF':
+                        is_valid = _validate_elf_at(data, pos)
+                    else:
+                        is_valid = True  # Other signatures are fine
+
+                    if is_valid:
                         detections.append(Detection(
-                            'MEDIUM', 'EMBEDDED_EXE_IN_BODY',
-                            f'{sig_name} signature found at byte {pos:,} (inside {fmt["name"]} data). '
-                            f'May be false positive from image/video data.'
+                            'HIGH', 'EMBEDDED_EXE_IN_BODY',
+                            f'{sig_name} VALID header found at byte {pos:,} (inside {fmt["name"]} data). '
+                            f'Confirmed valid PE/ELF structure.'
                         ))
                 elif marker_pos != -1 and pos > marker_pos:
                     detections.append(Detection(

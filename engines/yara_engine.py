@@ -76,13 +76,19 @@ def _build_default_rules() -> List[YaraRule]:
         name="PE_In_PDF", severity="critical",
         description="PE executable embedded inside PDF (classic red-team polyglot)",
         patterns=[b"%PDF"],
-        condition_fn=lambda d: b"MZ" in d and d.find(b"%PDF") < d.find(b"MZ"),
+        condition_fn=lambda d: (
+            b"MZ" in d and d.find(b"%PDF") < d.find(b"MZ") and
+            _validate_pe_header(d, d.find(b"MZ"))
+        ),
     ))
     rules.append(YaraRule(
         name="PDF_In_PE", severity="critical",
         description="PDF content injected into PE executable",
         patterns=[b"MZ"],
-        condition_fn=lambda d: b"%PDF" in d and d.find(b"MZ") < d.find(b"%PDF"),
+        condition_fn=lambda d: (
+            b"%PDF" in d and d.find(b"MZ") < d.find(b"%PDF") and
+            _validate_pe_header(d, 0)
+        ),
     ))
     rules.append(YaraRule(
         name="ELF_In_ZIP", severity="critical",
@@ -94,34 +100,78 @@ def _build_default_rules() -> List[YaraRule]:
         name="PE_In_ZIP", severity="critical",
         description="PE executable embedded in ZIP archive",
         patterns=[b"PK\x03\x04"],
-        condition_fn=lambda d: b"MZ" in d and d.find(b"PK\x03\x04") < d.find(b"MZ"),
+        condition_fn=lambda d: (
+            b"MZ" in d and d.find(b"PK\x03\x04") < d.find(b"MZ") and
+            _validate_pe_header(d, d.find(b"MZ"))
+        ),
     ))
     rules.append(YaraRule(
         name="PE_In_HTML", severity="critical",
         description="PE executable hidden in HTML document (MIME smuggling)",
         patterns=[b"<html"],
-        condition_fn=lambda d: b"MZ" in d and d.lower().find(b"<html") < d.find(b"MZ"),
+        condition_fn=lambda d: (
+            b"MZ" in d and d.lower().find(b"<html") < d.find(b"MZ") and
+            _validate_pe_header(d, d.find(b"MZ"))
+        ),
     ))
+    def _validate_pe_header(d, pos):
+        """Check if MZ at pos is a real PE header (not random bytes)."""
+        import struct as _st
+        try:
+            if pos + 64 > len(d):
+                return False
+            e_lfanew = _st.unpack_from('<I', d, pos + 60)[0]
+            pe_sig_pos = pos + e_lfanew
+            if pe_sig_pos + 4 > len(d):
+                return False
+            return d[pe_sig_pos:pe_sig_pos + 4] == b'PE\x00\x00'
+        except Exception:
+            return False
+
     rules.append(YaraRule(
         name="PE_In_Any_Media", severity="critical",
         description="PE executable embedded in image/media file",
         patterns=[b"MZ"],
         condition_fn=lambda d: (
             d[:2] != b"MZ" and  # Not itself a PE file
-            b"MZ" in d[20:] and  # PE header found after initial header
             d[:4] not in (b"\x7fELF", b"%PDF") and  # Not ELF or PDF
-            d[:8] != b"PK\x03\x04"  # Not ZIP
+            d[:8] != b"PK\x03\x04" and  # Not ZIP
+            any(_validate_pe_header(d, i) for i in range(20, min(len(d) - 64, 100000), 1)
+                if d[i:i+2] == b"MZ")
         ),
     ))
+    def _validate_elf_header(d, pos):
+        """Check if ELF magic at pos has valid ELF header structure."""
+        import struct as _st
+        try:
+            if pos + 20 > len(d):
+                return False
+            # ELF class (4): 1=32-bit, 2=64-bit
+            elf_class = d[pos + 4]
+            if elf_class not in (1, 2):
+                return False
+            # ELF data encoding (5): 1=little-endian, 2=big-endian
+            elf_data = d[pos + 5]
+            if elf_data not in (1, 2):
+                return False
+            # ELF type (16-17): 1=relocatable, 2=executable, 3=shared, 4=core
+            if pos + 18 > len(d):
+                return False
+            elf_type = _st.unpack_from('<H' if elf_data == 1 else '>H', d, pos + 16)[0]
+            return elf_type in (1, 2, 3, 4)
+        except Exception:
+            return False
+
     rules.append(YaraRule(
         name="ELF_In_Any_Media", severity="critical",
         description="ELF binary embedded in image/media file",
         patterns=[b"\x7fELF"],
         condition_fn=lambda d: (
             d[:4] != b"\x7fELF" and  # Not itself an ELF
-            b"\x7fELF" in d[20:] and  # ELF header found after initial header
             d[:4] != b"%PDF" and  # Not PDF
-            d[:8] != b"PK\x03\x04"  # Not ZIP
+            d[:8] != b"PK\x03\x04" and  # Not ZIP
+            any(_validate_elf_header(d, i) for i in range(20, min(len(d) - 20, 100000), 1)
+                if d[i:i+4] == b"\x7fELF")
         ),
     ))
     rules.append(YaraRule(
@@ -140,7 +190,11 @@ def _build_default_rules() -> List[YaraRule]:
         name="Script_In_PE", severity="critical",
         description="Script payload injected into PE executable",
         patterns=[b"MZ"],
-        condition_fn=lambda d: any(s in d for s in [b"<script", b"<?php", b"#!/usr"]),
+        condition_fn=lambda d: (
+            d[:2] == b"MZ" and  # Is a PE file
+            _validate_pe_header(d, 0) and  # Valid PE header
+            any(s in d for s in [b"<script", b"<?php", b"#!/usr"])  # Contains script
+        ),
     ))
 
     # ── HIGH: Obfuscation & evasion ──────────────────────────────────────
@@ -154,8 +208,11 @@ def _build_default_rules() -> List[YaraRule]:
     ))
     rules.append(YaraRule(
         name="Embedded_PE_MZ", severity="high",
-        description="Secondary MZ header found after initial file header",
-        condition_fn=lambda d: d.count(b"MZ") > 1,
+        description="Secondary valid PE header found after initial file header",
+        condition_fn=lambda d: (
+            sum(1 for i in range(20, min(len(d) - 64, 100000))
+                if d[i:i+2] == b"MZ" and _validate_pe_header(d, i)) > 0
+        ) if len(d) > 64 else False,
     ))
     rules.append(YaraRule(
         name="High_Entropy_Payload", severity="high",
@@ -260,7 +317,8 @@ def _build_default_rules() -> List[YaraRule]:
     rules.append(YaraRule(
         name="JavaScript_In_PDF", severity="medium",
         description="JavaScript action embedded in PDF",
-        patterns=[b"/JavaScript", b"/JS", b"/Launch", b"/SubmitForm"],
+        patterns=[b"/JavaScript", b"/Launch", b"/SubmitForm"],
+        condition_fn=lambda d: d[:4] == b"%PDF",  # Only in actual PDF files
     ))
     rules.append(YaraRule(
         name="Embedded_URL", severity="medium",

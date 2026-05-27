@@ -508,41 +508,75 @@ End Function
         }
 
     def _b_jpeg(self, c, p):
+        """JPEG polyglot: payload as JPEG COM (comment) marker inside the file."""
         if c[:2] != b'\xff\xd8': raise ValueError("Not JPEG")
         e = c.rfind(b'\xff\xd9')
         if e == -1: raise ValueError("No EOI")
-        return c[:e+2] + b'\xff\xfe' + struct.pack('<H', min(len(p), 65533)) + p
+        result = c[:e+2]
+        for i in range(0, len(p), 65533):
+            chunk = p[i:i+65533]
+            result += b'\xff\xfe' + struct.pack('<H', len(chunk) + 2) + chunk
+        result += b'\xff\xd9'
+        return result
 
     def _b_png(self, c, p):
+        """PNG polyglot: payload in tEXt ancillary chunk (spec-compliant skip)."""
         if c[:8] != b'\x89PNG\r\n\x1a\n': raise ValueError("Not PNG")
         e = c.rfind(b'IEND')
         if e == -1: raise ValueError("No IEND")
-        return c[:e+8] + p
+        chunk_data = b'Comment\x00' + p
+        chunk_type = b'tEXt'
+        chunk_len = struct.pack('>I', len(chunk_data))
+        import zlib as _zlib
+        crc = struct.pack('>I', _zlib.crc32(chunk_type + chunk_data) & 0xFFFFFFFF)
+        return c[:e] + chunk_len + chunk_type + chunk_data + crc + c[e:]
 
     def _b_gif(self, c, p):
+        """GIF polyglot: payload in Application Extension sub-blocks."""
         if c[:6] not in (b'GIF87a', b'GIF89a'): raise ValueError("Not GIF")
         e = c.rfind(b'\x3b')
         if e == -1: raise ValueError("No terminator")
-        return c[:e+1] + b'\x00'*16 + p
+        app_name = b'POLYSHLD\x00\x03\x01\x00\x00'
+        result = c[:e]
+        result += b'\x21\xff\x0b' + app_name
+        for i in range(0, len(p), 255):
+            chunk = p[i:i+255]
+            result += bytes([len(chunk)]) + chunk
+        result += b'\x00'
+        result += b'\x3b'
+        return result
 
     def _b_pdf(self, c, p):
+        """PDF polyglot: payload as EmbeddedFile stream object (spec-compliant)."""
         if not c.startswith(b'%PDF'): raise ValueError("Not PDF")
         e = c.rfind(b'%%EOF')
         if e == -1: raise ValueError("No EOF")
-        return c[:e+5] + b'\r\n' + p
+        obj = b'\n9999 0 obj\n<< /Type /EmbeddedFile /Length ' + str(len(p)).encode() + b' >>\nstream\n'
+        obj += p
+        obj += b'\nendstream\nendobj\n'
+        xref = b'\nxref\n0 1\ntrailer\n<< /Size 10000 /Root 1 0 R >>\nstartxref\n0\n%%EOF\n'
+        return c[:e+5] + obj + xref
 
     def _b_zip(self, c, p):
+        """ZIP polyglot: payload as a new entry inside the ZIP (not trailing data)."""
         if c[:2] != b'PK': raise ValueError("Not ZIP")
-        e = c.rfind(b'\x50\x4b\x05\x06')
-        if e == -1: raise ValueError("No EOCD")
-        # Append payload after EOCD — ZIP readers ignore trailing data
-        # This keeps the ZIP structure fully valid
-        return c + p
+        import io, zipfile
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            try:
+                with zipfile.ZipFile(io.BytesIO(c), 'r') as src:
+                    for item in src.infolist():
+                        zf.writestr(item, src.read(item.filename))
+            except Exception:
+                pass
+            zf.writestr('payload.bin', p)
+        return buf.getvalue()
 
     def _b_mp4(self, c, p):
+        """MP4 polyglot: payload in a 'free' atom (spec-compliant skip)."""
         if b'ftyp' not in c[:20]: raise ValueError("Not MP4")
-        atom = struct.pack('>I', len(p)+8) + b'free'
-        return c + atom + p
+        atom = struct.pack('>I', len(p) + 8) + b'free' + p
+        return c + atom
 
 
 # ── Detector Engine ──────────────────────────────────────────

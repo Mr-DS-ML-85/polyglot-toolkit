@@ -385,66 +385,43 @@ class ComprehensiveGenerator:
         return self.append_payload(cover_data, cover_fmt, payload_data, exec_fmt)
 
     def generate_polyglot(self, ptype, idx):
-        """Generate a single polyglot sample of the given type."""
+        """Generate polyglot using RANDOM strategy (anti-fingerprint)."""
         info = POLYGLOT_TYPES[ptype]
-        types = info["types"]
-
+        types = info['types']
         if len(types) < 2:
-            # Single-type (packed PE, FUD)
             return self._gen_single_type(ptype, idx, types[0])
-
         cover_fmt = types[0]
         exec_fmt = types[1]
-
-        # ── PNG+Script polyglots (berylliumsec) ─────────────────
-        if ptype in ("python_in_png", "shell_in_png"):
-            data = self._make_png_script_polyglot("sh" if "shell" in ptype else "py")
-            ext = ".png"
-            path = self.mal_dir / f"{ptype}_{idx:04d}{ext}"
+        if ptype in ('python_in_png', 'shell_in_png'):
+            data = self._make_png_script_polyglot('sh' if 'shell' in ptype else 'py')
+            path = self.mal_dir / f'{ptype}_{idx:04d}.png'
             path.write_bytes(data)
             return str(path)
-
-        if ptype == "python_in_jpg":
+        if ptype == 'python_in_jpg':
             data = self._make_jpg_script_polyglot()
-            path = self.mal_dir / f"{ptype}_{idx:04d}.jpg"
+            path = self.mal_dir / f'{ptype}_{idx:04d}.jpg'
             path.write_bytes(data)
             return str(path)
-
-        # ── XSS polyglots (michenriksen) ────────────────────────
-        if ptype.startswith("xss_in_"):
+        if ptype.startswith('xss_in_'):
             data = self._make_xss_polyglot(cover_fmt)
-            ext_map = {"html": ".html", "svg": ".svg", "gif": ".gif", "jpg": ".jpg"}
-            ext = ext_map.get(cover_fmt, ".bin")
-            path = self.mal_dir / f"{ptype}_{idx:04d}{ext}"
+            ext_map = {'html': '.html', 'svg': '.svg', 'gif': '.gif', 'jpg': '.jpg'}
+            ext = ext_map.get(cover_fmt, '.bin')
+            path = self.mal_dir / f'{ptype}_{idx:04d}{ext}'
             path.write_bytes(data)
             return str(path)
-
-        # Generate cover
-        cover = self.make_cover(cover_fmt)
-
-        # Generate payload
-        exec_header = EXEC_HEADERS.get(exec_fmt, b'\x00' * 4)
-        payload_body = self.rand_payload()
-        payload = exec_header + payload_body
-
-        # Special handling for web shell polyglots
-        if exec_fmt in ("php", "asp", "jsp"):
-            shell_code = self._make_webshell(exec_fmt)
-            payload = shell_code
-
-        # Combine
-        polyglot = self.inject_payload(cover, cover_fmt, payload, exec_fmt)
-
-        # Save
-        ext_map = {"jpg": ".jpg", "jpeg": ".jpg", "png": ".png", "gif": ".gif",
-                   "bmp": ".bmp", "pdf": ".pdf", "zip": ".zip", "rar": ".rar",
-                   "7z": ".7z", "mp4": ".mp4", "mp3": ".mp3", "wav": ".wav",
-                   "webm": ".webm", "swf": ".swf", "tiff": ".tiff", "flac": ".flac",
-                   "ogg": ".ogg", "html": ".html", "doc": ".doc", "docx": ".docx",
-                   "odt": ".odt", "exe": ".exe"}
-        ext = ext_map.get(cover_fmt, ".bin")
-        fname = f"{ptype}_{idx:04d}{ext}"
-        path = self.mal_dir / fname
+        strategy, strategy_name = get_random_strategy()
+        cover = make_diverse_cover(cover_fmt)
+        payload = make_diverse_payload(exec_fmt)
+        if exec_fmt in ('php', 'asp', 'jsp'):
+            payload = self._make_webshell(exec_fmt)
+        polyglot = strategy.inject(cover, payload, cover_fmt, exec_fmt)
+        ext_map = {'jpg': '.jpg', 'png': '.png', 'gif': '.gif', 'bmp': '.bmp',
+                   'pdf': '.pdf', 'zip': '.zip', 'rar': '.rar', '7z': '.7z',
+                   'mp4': '.mp4', 'mp3': '.mp3', 'wav': '.wav', 'webm': '.webm',
+                   'tiff': '.tiff', 'html': '.html', 'doc': '.doc', 'docx': '.docx',
+                   'odt': '.odt', 'exe': '.exe'}
+        ext = ext_map.get(cover_fmt, '.bin')
+        path = self.mal_dir / f'{ptype}_{idx:04d}{ext}'
         path.write_bytes(polyglot)
         return str(path)
 
@@ -611,6 +588,37 @@ class ComprehensiveGenerator:
                     samples.append((path, 0, "clean", "safe"))
                 except Exception as e:
                     print(f"  [!] Failed benign_{fmt}_{i}: {e}")
+
+        # Adversarial benign (hard negatives: clean files that look polyglot-like)
+        n_adv = max(1, n_per_type // 2)
+        for fmt in benign_fmts[:8]:
+            for i in range(n_adv):
+                try:
+                    adv_data = make_adversarial_benign(fmt)
+                    ext = {"jpg":".jpg","png":".png","gif":".gif","pdf":".pdf",
+                           "zip":".zip","html":".html","txt":".txt","mp4":".mp4"}.get(fmt,".bin")
+                    path = self.ben_dir / f"adv_{fmt}_{i:04d}{ext}"
+                    path.write_bytes(adv_data)
+                    samples.append((str(path), 0, "adversarial_benign", "safe"))
+                except Exception as e:
+                    print(f"  [!] Failed adv benign {fmt}_{i}: {e}")
+
+        # Evasion polyglots (hard positives: polyglots that try to evade detection)
+        n_ev = max(1, n_per_type // 3)
+        ev_types = [k for k, v in POLYGLOT_TYPES.items() if len(v["types"]) >= 2][:20]
+        for ptype in ev_types:
+            info = POLYGLOT_TYPES[ptype]
+            cf, ef = info["types"][0], info["types"][1]
+            for i in range(n_ev):
+                try:
+                    ev_data = make_evasion_polyglot(cf, ef)
+                    ext = {"jpg":".jpg","png":".png","gif":".gif","pdf":".pdf",
+                           "zip":".zip","rar":".rar","mp4":".mp4","html":".html"}.get(cf,".bin")
+                    path = self.mal_dir / f"evasion_{ptype}_{i:04d}{ext}"
+                    path.write_bytes(ev_data)
+                    samples.append((str(path), 1, f"evasion_{ptype}", info["severity"]))
+                except Exception as e:
+                    print(f"  [!] Failed evasion {ptype}_{i}: {e}")
 
         return samples
 

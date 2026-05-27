@@ -128,14 +128,14 @@ class Scanner:
             ml_component = result.ml_risk_score * ml_weight
             yara_component = result.yara_max_score * 100.0 * yara_weight
 
-            # Structural risk: multiple types or polyglot markers
+            # Structural risk: only flag REAL polyglot evidence
             struct_risk = 0.0
             if len(result.detected_types) > 1:
-                struct_risk += 30.0
+                struct_risk += 10.0  # Reduced: ZIP+image is normal
             if result.polyglot_markers:
-                struct_risk += 40.0
+                struct_risk += 30.0  # Real polyglot indicators
             if result.entropy > 7.5:
-                struct_risk += 15.0
+                struct_risk += 5.0   # High entropy alone is not suspicious
             struct_component = min(struct_risk, 100.0) * struct_weight
 
             result.combined_risk = ml_component + yara_component + struct_component

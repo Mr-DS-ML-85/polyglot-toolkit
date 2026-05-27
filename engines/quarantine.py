@@ -18,9 +18,9 @@ class QuarantineManager:
     """Manages quarantined files with full audit trail."""
 
     # NEVER auto-quarantine below these thresholds
-    MIN_CONFIDENCE = 0.60
-    MIN_RISK_SCORE = 50.0
-    SAFE_RISK_LEVELS = {"UNKNOWN", "LOW", "CLEAN", "SAFE"}
+    MIN_CONFIDENCE = 0.80   # Must be 80%+ confident
+    MIN_RISK_SCORE = 70.0   # Must be 70+ risk score
+    SAFE_RISK_LEVELS = {"UNKNOWN", "LOW", "CLEAN", "SAFE", "MEDIUM"}
 
     def __init__(self, quarantine_dir: str = "quarantine",
                  encrypt_names: bool = True, max_size_mb: int = 500,
@@ -120,25 +120,40 @@ class QuarantineManager:
             logger.error(f"Quarantine ID not found: {qid}")
             return None
 
+        full_qid = meta["quarantine_id"]
+
         qpath = Path(meta["quarantine_path"])
+        # Fallback: search quarantine dir if stored path is missing
         if not qpath.exists():
-            logger.error(f"Quarantine file missing: {qpath}")
-            return None
+            alt = self.quarantine_dir / f"{full_qid}.quarantine"
+            if alt.exists():
+                qpath = alt
+            else:
+                matches = list(self.quarantine_dir.glob(f"{full_qid}*"))
+                if matches:
+                    qpath = matches[0]
+                else:
+                    logger.error(f"Quarantine file missing: {qpath}")
+                    return None
 
         dest = Path(dest_path) if dest_path else Path(meta["original_path"])
         dest.parent.mkdir(parents=True, exist_ok=True)
 
-        # Avoid overwrite
         if dest.exists():
-            dest = dest.with_stem(dest.stem + f"_restored_{qid[:6]}")
+            dest = dest.with_stem(dest.stem + f"_restored_{full_qid[:6]}")
 
-        shutil.move(str(qpath), str(dest))
+        try:
+            shutil.move(str(qpath), str(dest))
+        except Exception as e:
+            logger.error(f"Failed to restore {qid}: {e}")
+            return None
+
         meta["restored"] = True
         meta["restored_to"] = str(dest)
         meta["restored_at"] = datetime.now().isoformat()
-        self._update_meta(qid, meta)
+        self._update_meta(full_qid, meta)
 
-        logger.info(f"Restored: {qid} → {dest}")
+        logger.info(f"Restored: {full_qid} -> {dest}")
         return str(dest)
 
     def list_quarantined(self, include_restored: bool = False) -> List[Dict]:
@@ -272,7 +287,8 @@ class QuarantineManager:
     def _update_meta(self, qid: str, updated: Dict):
         entries = self._read_all_meta()
         for i, entry in enumerate(entries):
-            if entry.get("quarantine_id") == qid:
+            eid = entry.get("quarantine_id", "")
+            if eid == qid or eid.startswith(qid) or qid.startswith(eid):
                 entries[i] = updated
                 break
         with open(self.meta_path, "w", encoding="utf-8") as f:
