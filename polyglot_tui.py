@@ -938,6 +938,10 @@ class PolyglotTUI:
                 "  [bold red]6[/bold red] │ 📋 [white]Activity Log[/white]\n"
                 "  [bold red]7[/bold red] │ 🔓 [white]Recover .bak Files[/white]\n"
                 "  [bold red]8[/bold red] │ 🖥  [white]Server Mode[/white]\n"
+                "  [bold red]9[/bold red] │ 🔬 [white]Deep Analysis[/white]\n"
+                "  [bold red]10[/bold red] │ 📡 [white]Monitoring Panel[/white]\n"
+                "  [bold red]11[/bold red] │ 🔍 [white]Investigation Panel[/white]\n"
+                "  [bold red]12[/bold red] │ 🧪 [white]Benchmark & Fuzzing[/white]\n"
                 "  [bold red]0[/bold red] │ ✕  [dim]Exit[/dim]\n",
                 title="[bold red]◆ POLYGLOT[/bold red]",
                 subtitle="[dim]v3.0 — Red Team + Shield Edition[/dim]",
@@ -946,7 +950,7 @@ class PolyglotTUI:
             ))
 
             choice = self.safe_input("\n[bold red]Select[/bold red]",
-                                     choices=["0","1","2","3","4","5","6","7","8"],
+                                     choices=["0","1","2","3","4","5","6","7","8","9","10","11","12"],
                                      default="1")
             if choice is None:
                 continue
@@ -970,6 +974,14 @@ class PolyglotTUI:
                 self.menu_recover()
             elif choice == "8":
                 self.menu_server()
+            elif choice == "9":
+                self.menu_deep_analysis()
+            elif choice == "10":
+                self.menu_monitoring()
+            elif choice == "11":
+                self.menu_investigation()
+            elif choice == "12":
+                self.menu_benchmark()
 
     # ── Builder Menu ─────────────────────────────────────────
 
@@ -1465,6 +1477,826 @@ class PolyglotTUI:
             console.print("[dim]Install: pip install flask[/dim]")
         except Exception as e:
             console.print(f"[red]✗ Server error: {e}[/red]")
+
+    # ── Deep Analysis Menu ───────────────────────────────────────
+
+    def menu_deep_analysis(self):
+        console.print()
+        console.print(Panel("[bold cyan]🔬 DEEP ANALYSIS[/bold cyan]", border_style="cyan"))
+        console.print("  [cyan]1[/cyan] │ 📋 Format Parser + Differential Analysis")
+        console.print("  [cyan]2[/cyan] │ 🖼  Steganography Detection")
+        console.print("  [cyan]3[/cyan] │ 💻 PE Anomaly Analysis")
+        console.print("  [cyan]4[/cyan] │ 🐧 ELF Section Anomaly Detection")
+        console.print("  [cyan]5[/cyan] │ 📄 Office Macro Static Analysis")
+        console.print("  [cyan]6[/cyan] │ 📦 Archive Recursion + Container Nesting")
+        console.print("  [cyan]7[/cyan] │ 🧠 ONNX Model Export")
+        console.print("  [cyan]8[/cyan] │ 🔍 Full Analysis (all engines)")
+
+        choice = self.safe_input("\n[bold cyan]Select[/bold cyan]",
+                                 choices=["1","2","3","4","5","6","7","8"], default="8")
+        if choice is None: return
+
+        target = self.safe_input("[bold cyan]Target file/directory[/bold cyan]")
+        if target is None: return
+        if not os.path.exists(target):
+            console.print(f"[red]✗ Not found: {target}[/red]")
+            return
+
+        files = [target] if os.path.isfile(target) else \
+                [os.path.join(r, f) for r, _, fs in os.walk(target)
+                 for f in fs if not f.startswith('.')][:100]
+
+        console.print(f"\n[dim]Analyzing {len(files)} files...[/dim]\n")
+
+        with Progress(SpinnerColumn(), TextColumn("[bold]{task.description}"),
+                     BarColumn(), TaskProgressColumn(), console=console) as progress:
+            task = progress.add_task("Deep analysis...", total=len(files))
+
+            for fpath in files:
+                fname = os.path.basename(fpath)
+                findings_count = 0
+
+                try:
+                    # Format Parser
+                    if choice in ("1", "8"):
+                        try:
+                            from engines.format_parser import FormatParser
+                            fp = FormatParser()
+                            result = fp.differential_analysis(fpath)
+                            if result.mismatches or result.anomalies:
+                                findings_count += len(result.mismatches) + len(result.anomalies)
+                                sev = "critical" if result.risk_score > 0.5 else "warning"
+                                console.print(f"  [{'bold red' if sev=='critical' else 'yellow'}]"
+                                            f"[{sev.upper()}][/bold red] 📋 {fname}")
+                                for m in result.mismatches:
+                                    console.print(f"    [yellow]MISMATCH:[/yellow] {m}")
+                                for a in result.anomalies:
+                                    console.print(f"    [yellow]ANOMALY:[/yellow] {a}")
+                        except Exception as e:
+                            console.print(f"  [dim]📋 Format parser: {e}[/dim]")
+
+                    # Steganography
+                    if choice in ("2", "8"):
+                        try:
+                            from engines.stego_detector import StegoDetector
+                            sd = StegoDetector()
+                            steg_findings = sd.analyze(fpath)
+                            for sf in steg_findings:
+                                if sf.severity in ("critical", "high"):
+                                    findings_count += 1
+                                    console.print(f"  [bold red][{sf.severity.upper()}][/bold red]"
+                                                f" 🖼 {fname}: {sf.description}")
+                        except Exception as e:
+                            console.print(f"  [dim]🖼 Stego: {e}[/dim]")
+
+                    # PE Analysis
+                    if choice in ("3", "8"):
+                        ext = os.path.splitext(fpath)[1].lower()
+                        if ext in (".exe", ".dll", ".sys", ".scr", ".ocx", ".bin") or choice == "3":
+                            try:
+                                from engines.pe_analyzer import PEAnalyzer
+                                pe = PEAnalyzer()
+                                pe_findings = pe.analyze(fpath)
+                                for pf in pe_findings:
+                                    if pf.severity in ("critical", "high"):
+                                        findings_count += 1
+                                        console.print(f"  [bold red][{pf.severity.upper()}][/bold red]"
+                                                    f" 💻 {fname} [{pf.category}]: {pf.description}")
+                            except Exception as e:
+                                console.print(f"  [dim]💻 PE: {e}[/dim]")
+
+                    # ELF Analysis
+                    if choice in ("4", "8"):
+                        ext = os.path.splitext(fpath)[1].lower()
+                        if ext in (".elf", ".so", ".o", ".ko", ".bin") or choice == "4":
+                            try:
+                                from engines.elf_analyzer import ELFAnalyzer
+                                ef = ELFAnalyzer()
+                                elf_findings = ef.analyze(fpath)
+                                for ef_f in elf_findings:
+                                    if ef_f.severity in ("critical", "high"):
+                                        findings_count += 1
+                                        console.print(f"  [bold red][{ef_f.severity.upper()}][/bold red]"
+                                                    f" 🐧 {fname} [{ef_f.category}]: {ef_f.description}")
+                            except Exception as e:
+                                console.print(f"  [dim]🐧 ELF: {e}[/dim]")
+
+                    # Office Macro Analysis
+                    if choice in ("5", "8"):
+                        ext = os.path.splitext(fpath)[1].lower()
+                        if ext in (".doc", ".xls", ".ppt", ".docx", ".xlsx", ".pptx",
+                                   ".docm", ".xlsm", ".pptm", ".rtf") or choice == "5":
+                            try:
+                                from engines.office_analyzer import OfficeAnalyzer
+                                oa = OfficeAnalyzer()
+                                macro_findings = oa.analyze(fpath)
+                                for mf in macro_findings:
+                                    if mf.severity in ("critical", "high"):
+                                        findings_count += 1
+                                        console.print(f"  [bold red][{mf.severity.upper()}][/bold red]"
+                                                    f" 📄 {fname} [{mf.category}]: {mf.description}")
+                                        if mf.vba_snippet:
+                                            console.print(f"    [dim]{mf.vba_snippet[:80]}[/dim]")
+                            except Exception as e:
+                                console.print(f"  [dim]📄 Office: {e}[/dim]")
+
+                    # Archive Recursion
+                    if choice in ("6", "8"):
+                        ext = os.path.splitext(fpath)[1].lower()
+                        if ext in (".zip", ".rar", ".7z", ".gz", ".bz2", ".xz",
+                                   ".tar", ".cab", ".jar", ".apk") or choice == "6":
+                            try:
+                                from engines.archive_scanner import ArchiveScanner
+                                ars = ArchiveScanner()
+                                arch_findings = ars.scan(fpath)
+                                for af in arch_findings:
+                                    if af.severity in ("critical", "high"):
+                                        findings_count += 1
+                                        console.print(f"  [bold red][{af.severity.upper()}][/bold red]"
+                                                    f" 📦 {fname} [{af.category}]: {af.description}")
+                            except Exception as e:
+                                console.print(f"  [dim]📦 Archive: {e}[/dim]")
+
+                    if findings_count == 0:
+                        console.print(f"  [green]✓ {fname}[/green] [dim]— clean[/dim]")
+
+                except Exception as e:
+                    console.print(f"  [red]✗ {fname}: {e}[/red]")
+
+                progress.advance(task)
+
+        # ONNX Export
+        if choice == "7":
+            console.print("\n[cyan]Exporting CatBoost model to ONNX...[/cyan]")
+            try:
+                from engines.onnx_export import ONNXExporter
+                exporter = ONNXExporter()
+                result = exporter.export()
+                if result.get("status") == "success":
+                    console.print(f"[green]✓ ONNX model exported: {result['output']}[/green]")
+                    console.print(f"  Size: {result['size']:,} bytes")
+                    console.print(f"  Features: {result['features']}")
+                else:
+                    console.print(f"[red]✗ Export failed: {result.get('error')}[/red]")
+            except Exception as e:
+                console.print(f"[red]✗ ONNX export error: {e}[/red]")
+
+    # ── Monitoring Panel ─────────────────────────────────────────
+
+    def menu_monitoring(self):
+        console.print()
+        console.print(Panel("[bold magenta]📡 MONITORING PANEL[/bold magenta]", border_style="magenta"))
+        console.print("  [magenta]1[/magenta] │ 📋 Live Logs Panel")
+        console.print("  [magenta]2[/magenta] │ ⚡ Realtime Events")
+        console.print("  [magenta]3[/magenta] │ 🔄 Process Viewer")
+        console.print("  [magenta]4[/magenta] │ 🔌 Connection Viewer")
+        console.print("  [magenta]5[/magenta] │ 🚨 Alerts Panel")
+        console.print("  [magenta]6[/magenta] │ 📁 File Change Monitor")
+        console.print("  [magenta]7[/magenta] │ 💻 Terminal Activity Feed")
+        console.print("  [magenta]8[/magenta] │ 📝 Workspace Audit Log")
+        console.print("  [magenta]9[/magenta] │ 🔁 Session Replay")
+
+        choice = self.safe_input("\n[bold magenta]Select[/bold magenta]",
+                                 choices=["1","2","3","4","5","6","7","8","9"], default="1")
+        if choice is None: return
+
+        if choice == "1":
+            self._live_logs_panel()
+        elif choice == "2":
+            self._realtime_events()
+        elif choice == "3":
+            self._process_viewer()
+        elif choice == "4":
+            self._connection_viewer()
+        elif choice == "5":
+            self._alerts_panel()
+        elif choice == "6":
+            self._file_change_monitor()
+        elif choice == "7":
+            self._terminal_activity_feed()
+        elif choice == "8":
+            self._workspace_audit_log()
+        elif choice == "9":
+            self._session_replay()
+
+    def _live_logs_panel(self):
+        """Live scrolling log panel."""
+        console.print()
+        console.print(Panel("[bold magenta]📋 LIVE LOGS[/bold magenta]", border_style="magenta"))
+        log_dir = os.path.expanduser("~/.polyglot/logs")
+        if not os.path.isdir(log_dir):
+            console.print("[yellow]No logs directory found. Logs will appear after scans.[/yellow]")
+            return
+        log_files = sorted(Path(log_dir).glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not log_files:
+            console.print("[dim]No log files yet.[/dim]")
+            return
+        console.print(f"[dim]Showing last 50 lines from: {log_files[0].name}[/dim]\n")
+        try:
+            with open(log_files[0]) as f:
+                lines = f.readlines()[-50:]
+            for line in lines:
+                line = line.rstrip()
+                if "ERROR" in line or "CRITICAL" in line:
+                    console.print(f"[red]{line}[/red]")
+                elif "WARNING" in line:
+                    console.print(f"[yellow]{line}[/yellow]")
+                elif "THREAT" in line:
+                    console.print(f"[bold red]{line}[/bold red]")
+                else:
+                    console.print(f"[dim]{line}[/dim]")
+        except Exception as e:
+            console.print(f"[red]Error reading log: {e}[/red]")
+
+    def _realtime_events(self):
+        """Show recent security events."""
+        console.print()
+        console.print(Panel("[bold magenta]⚡ REALTIME EVENTS[/bold magenta]", border_style="magenta"))
+        events = list(self.alerts)[-20:]
+        if not events:
+            console.print("[dim]No events recorded yet. Run scans to generate events.[/dim]")
+            return
+        for ev in events:
+            sev = ev.get("severity", "info")
+            styles = {"critical": "bold red", "high": "red", "warning": "yellow", "info": "dim"}
+            console.print(f"  [{styles.get(sev, 'white')}][{sev.upper()}][/{styles.get(sev, 'white')}] "
+                        f"{ev.get('time', '')} — {ev.get('message', '')}")
+
+    def _process_viewer(self):
+        """Show running PolyglotShield processes."""
+        console.print()
+        console.print(Panel("[bold magenta]🔄 PROCESS VIEWER[/bold magenta]", border_style="magenta"))
+        try:
+            result = subprocess.run(["ps", "aux"], capture_output=True, text=True, timeout=5)
+            procs = [l for l in result.stdout.split("\n") if "polyglot" in l.lower() or "python" in l.lower()]
+            if procs:
+                for p in procs[:20]:
+                    console.print(f"  [dim]{p[:120]}[/dim]")
+            else:
+                console.print("[dim]No PolyglotShield processes running.[/dim]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def _connection_viewer(self):
+        """Show active network connections."""
+        console.print()
+        console.print(Panel("[bold magenta]🔌 CONNECTION VIEWER[/bold magenta]", border_style="magenta"))
+        try:
+            result = subprocess.run(["ss", "-tuln"], capture_output=True, text=True, timeout=5)
+            lines = result.stdout.strip().split("\n")[:20]
+            for line in lines:
+                console.print(f"  [dim]{line[:120]}[/dim]")
+        except Exception:
+            try:
+                result = subprocess.run(["netstat", "-tuln"], capture_output=True, text=True, timeout=5)
+                lines = result.stdout.strip().split("\n")[:20]
+                for line in lines:
+                    console.print(f"  [dim]{line[:120]}[/dim]")
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+
+    def _alerts_panel(self):
+        """Show all alerts with severity filtering."""
+        console.print()
+        console.print(Panel("[bold magenta]🚨 ALERTS[/bold magenta]", border_style="magenta"))
+        alerts = list(self.alerts)
+        if not alerts:
+            console.print("[dim]No alerts. All clear.[/dim]")
+            return
+        crit = [a for a in alerts if a.get("severity") == "critical"]
+        high = [a for a in alerts if a.get("severity") == "high"]
+        warn = [a for a in alerts if a.get("severity") == "warning"]
+        console.print(f"  [bold red]Critical: {len(crit)}[/bold red]  "
+                    f"[red]High: {len(high)}[/red]  "
+                    f"[yellow]Warning: {len(warn)}[/yellow]  "
+                    f"[dim]Total: {len(alerts)}[/dim]\n")
+        for a in alerts[-15:]:
+            sev = a.get("severity", "info")
+            styles = {"critical": "bold white on red", "high": "bold red", "warning": "yellow"}
+            console.print(f"  [{styles.get(sev, 'dim')}][{sev.upper()}][/{styles.get(sev, 'dim')}] "
+                        f"{a.get('message', '')}")
+
+    def _file_change_monitor(self):
+        """Monitor directory for file changes."""
+        console.print()
+        console.print(Panel("[bold magenta]📁 FILE CHANGE MONITOR[/bold magenta]", border_style="magenta"))
+        directory = self.safe_input("[bold cyan]Watch directory[/bold cyan]",
+                                     default=str(Path.home() / "Downloads"))
+        if directory is None: return
+        if not os.path.isdir(directory):
+            console.print(f"[red]✗ Not a directory: {directory}[/red]")
+            return
+        console.print(f"\n[green]▶ Monitoring: {directory}[/green]")
+        console.print("[dim]Press Ctrl+C to stop[/dim]\n")
+        try:
+            before = {}
+            for root, dirs, files in os.walk(directory):
+                for f in files:
+                    fp = os.path.join(root, f)
+                    try:
+                        before[fp] = os.path.getmtime(fp)
+                    except Exception:
+                        pass
+            console.print(f"  [dim]Baseline: {len(before)} files indexed[/dim]")
+            changes = 0
+            while True:
+                time.sleep(2)
+                after = {}
+                for root, dirs, files in os.walk(directory):
+                    for f in files:
+                        fp = os.path.join(root, f)
+                        try:
+                            after[fp] = os.path.getmtime(fp)
+                        except Exception:
+                            pass
+                for fp, mtime in after.items():
+                    if fp not in before:
+                        console.print(f"  [green]+ NEW:[/green] {os.path.basename(fp)}")
+                        changes += 1
+                    elif mtime != before[fp]:
+                        console.print(f"  [yellow]~ MODIFIED:[/yellow] {os.path.basename(fp)}")
+                        changes += 1
+                for fp in before:
+                    if fp not in after:
+                        console.print(f"  [red]- DELETED:[/red] {os.path.basename(fp)}")
+                        changes += 1
+                before = after
+                if changes > 0:
+                    self.stats['threats'] += changes
+        except KeyboardInterrupt:
+            console.print(f"\n[dim]Stopped. {changes} changes detected.[/dim]")
+
+    def _terminal_activity_feed(self):
+        """Show terminal/command activity."""
+        console.print()
+        console.print(Panel("[bold magenta]💻 TERMINAL ACTIVITY[/bold magenta]", border_style="magenta"))
+        history_file = os.path.expanduser("~/.bash_history")
+        if os.path.exists(history_file):
+            try:
+                with open(history_file) as f:
+                    lines = f.readlines()[-30:]
+                console.print("[dim]Last 30 commands:[/dim]\n")
+                for line in lines:
+                    line = line.rstrip()
+                    if any(k in line.lower() for k in ("curl", "wget", "chmod", "rm ", "eval", "exec")):
+                        console.print(f"  [red]⚠ {line}[/red]")
+                    else:
+                        console.print(f"  [dim]{line}[/dim]")
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+        else:
+            console.print("[dim]No bash history found.[/dim]")
+
+    def _workspace_audit_log(self):
+        """Show workspace audit trail."""
+        console.print()
+        console.print(Panel("[bold magenta]📝 WORKSPACE AUDIT LOG[/bold magenta]", border_style="magenta"))
+        audit_path = os.path.expanduser("~/.polyglot/audit.jsonl")
+        if not os.path.exists(audit_path):
+            console.print("[dim]No audit log yet. Run scans to generate entries.[/dim]")
+            return
+        try:
+            with open(audit_path) as f:
+                lines = f.readlines()[-30:]
+            for line in lines:
+                try:
+                    entry = json.loads(line.strip())
+                    sev = entry.get("severity", "info")
+                    styles = {"critical": "bold red", "high": "red", "warning": "yellow", "info": "dim"}
+                    console.print(f"  [{styles.get(sev, 'white')}]{entry.get('timestamp', '')} "
+                                f"[{sev.upper()}] {entry.get('message', '')}[/{styles.get(sev, 'white')}]")
+                except Exception:
+                    console.print(f"  [dim]{line.strip()[:120]}[/dim]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def _session_replay(self):
+        """Replay a previous scan session."""
+        console.print()
+        console.print(Panel("[bold magenta]🔁 SESSION REPLAY[/bold magenta]", border_style="magenta"))
+        sessions_dir = os.path.expanduser("~/.polyglot/sessions")
+        if not os.path.isdir(sessions_dir):
+            console.print("[dim]No recorded sessions yet.[/dim]")
+            return
+        sessions = sorted(Path(sessions_dir).glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not sessions:
+            console.print("[dim]No sessions found.[/dim]")
+            return
+        console.print("[dim]Recent sessions:[/dim]")
+        for i, s in enumerate(sessions[:10]):
+            console.print(f"  [cyan]{i+1}[/cyan] │ {s.name}")
+        choice = self.safe_input("[cyan]Session number[/cyan]",
+                                 choices=[str(i+1) for i in range(min(10, len(sessions)))])
+        if choice is None: return
+        try:
+            with open(sessions[int(choice)-1]) as f:
+                session = json.load(f)
+            console.print(f"\n[bold]Session: {session.get('name', 'Unknown')}[/bold]")
+            console.print(f"  Time: {session.get('timestamp', 'Unknown')}")
+            console.print(f"  Files scanned: {session.get('files_scanned', 0)}")
+            console.print(f"  Threats found: {session.get('threats', 0)}")
+            console.print(f"\n[dim]Events:[/dim]")
+            for ev in session.get("events", [])[-20:]:
+                console.print(f"  {ev}")
+        except Exception as e:
+            console.print(f"[red]Error replaying session: {e}[/red]")
+
+    # ── Investigation Panel ──────────────────────────────────────
+
+    def menu_investigation(self):
+        console.print()
+        console.print(Panel("[bold blue]🔍 INVESTIGATION PANEL[/bold blue]", border_style="blue"))
+        console.print("  [blue]1[/blue] │ 🔎 Searchable Logs")
+        console.print("  [blue]2[/blue] │ 📅 Timeline View")
+        console.print("  [blue]3[/blue] │ 📸 Compare Snapshots")
+        console.print("  [blue]4[/blue] │ 🔗 Request Correlation")
+        console.print("  [blue]5[/blue] │ 🏷  Tagged Events")
+        console.print("  [blue]6[/blue] │ 🔖 Bookmark Incidents")
+        console.print("  [blue]7[/blue] │ 📤 Export Investigation")
+        console.print("  [blue]8[/blue] │ 📝 Notes Sidebar")
+        console.print("  [blue]9[/blue] │ 📁 Evidence Folder")
+
+        choice = self.safe_input("\n[bold blue]Select[/bold blue]",
+                                 choices=["1","2","3","4","5","6","7","8","9"], default="1")
+        if choice is None: return
+
+        if choice == "1":
+            self._searchable_logs()
+        elif choice == "2":
+            self._timeline_view()
+        elif choice == "3":
+            self._compare_snapshots()
+        elif choice == "4":
+            self._request_correlation()
+        elif choice == "5":
+            self._tagged_events()
+        elif choice == "6":
+            self._bookmark_incidents()
+        elif choice == "7":
+            self._export_investigation()
+        elif choice == "8":
+            self._notes_sidebar()
+        elif choice == "9":
+            self._evidence_folder()
+
+    def _searchable_logs(self):
+        """Full-text search across all logs."""
+        console.print()
+        console.print(Panel("[bold blue]🔎 SEARCHABLE LOGS[/bold blue]", border_style="blue"))
+        query = self.safe_input("[bold cyan]Search query[/bold cyan]")
+        if not query: return
+
+        log_dir = os.path.expanduser("~/.polyglot/logs")
+        if not os.path.isdir(log_dir):
+            console.print("[yellow]No logs directory found.[/yellow]")
+            return
+
+        matches = 0
+        for logfile in Path(log_dir).glob("*.log"):
+            try:
+                with open(logfile) as f:
+                    for i, line in enumerate(f, 1):
+                        if query.lower() in line.lower():
+                            matches += 1
+                            console.print(f"  [cyan]{logfile.name}:{i}[/cyan] {line.rstrip()[:120]}")
+                            if matches >= 50:
+                                break
+            except Exception:
+                pass
+            if matches >= 50:
+                break
+
+        if matches == 0:
+            console.print(f"[dim]No matches for '{query}'[/dim]")
+        else:
+            console.print(f"\n[dim]{matches} matches found[/dim]")
+
+    def _timeline_view(self):
+        """Chronological event timeline."""
+        console.print()
+        console.print(Panel("[bold blue]📅 TIMELINE VIEW[/bold blue]", border_style="blue"))
+
+        # Collect events from various sources
+        events = []
+
+        # From alerts
+        for alert in self.alerts:
+            events.append({"time": alert.get("time", ""), "type": "alert",
+                          "message": alert.get("message", ""), "severity": alert.get("severity", "")})
+
+        # From audit log
+        audit_path = os.path.expanduser("~/.polyglot/audit.jsonl")
+        if os.path.exists(audit_path):
+            try:
+                with open(audit_path) as f:
+                    for line in f.readlines()[-100:]:
+                        try:
+                            entry = json.loads(line.strip())
+                            events.append({"time": entry.get("timestamp", ""), "type": "audit",
+                                          "message": entry.get("message", ""), "severity": entry.get("severity", "")})
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+        if not events:
+            console.print("[dim]No events to display. Run scans first.[/dim]")
+            return
+
+        # Sort by time
+        events.sort(key=lambda e: e.get("time", ""))
+
+        console.print(f"[dim]{len(events)} events — showing last 30:[/dim]\n")
+        for ev in events[-30:]:
+            sev = ev.get("severity", "info")
+            styles = {"critical": "bold red", "high": "red", "warning": "yellow", "info": "dim"}
+            console.print(f"  [{styles.get(sev, 'white')}]{ev.get('time', '?'):>19} "
+                        f"[{sev:>8}] {ev.get('message', '')[:80]}[/{styles.get(sev, 'white')}]")
+
+    def _compare_snapshots(self):
+        """Compare two scan snapshots."""
+        console.print()
+        console.print(Panel("[bold blue]📸 COMPARE SNAPSHOTS[/bold blue]", border_style="blue"))
+        console.print("[dim]Compare two directory states to find changes.[/dim]\n")
+
+        dir1 = self.safe_input("[bold cyan]First snapshot (directory)[/bold cyan]")
+        if dir1 is None: return
+        dir2 = self.safe_input("[bold cyan]Second snapshot (directory)[/bold cyan]")
+        if dir2 is None: return
+
+        if not os.path.isdir(dir1) or not os.path.isdir(dir2):
+            console.print("[red]Both must be valid directories.[/red]")
+            return
+
+        def get_file_hashes(directory):
+            hashes = {}
+            for root, _, files in os.walk(directory):
+                for f in files:
+                    fp = os.path.join(root, f)
+                    try:
+                        with open(fp, "rb") as fh:
+                            h = hashlib.sha256(fh.read()).hexdigest()[:16]
+                        hashes[f] = h
+                    except Exception:
+                        pass
+            return hashes
+
+        snap1 = get_file_hashes(dir1)
+        snap2 = get_file_hashes(dir2)
+
+        added = [f for f in snap2 if f not in snap1]
+        removed = [f for f in snap1 if f not in snap2]
+        modified = [f for f in snap1 if f in snap2 and snap1[f] != snap2[f]]
+
+        console.print(f"  [green]+ Added: {len(added)}[/green]")
+        for f in added[:10]:
+            console.print(f"    [green]+ {f}[/green]")
+        console.print(f"  [red]- Removed: {len(removed)}[/red]")
+        for f in removed[:10]:
+            console.print(f"    [red]- {f}[/red]")
+        console.print(f"  [yellow]~ Modified: {len(modified)}[/yellow]")
+        for f in modified[:10]:
+            console.print(f"    [yellow]~ {f}[/yellow]")
+
+    def _request_correlation(self):
+        """Correlate findings across multiple scans."""
+        console.print()
+        console.print(Panel("[bold blue]🔗 REQUEST CORRELATION[/bold blue]", border_style="blue"))
+        target = self.safe_input("[bold cyan]Target directory to correlate[/bold cyan]")
+        if target is None: return
+        if not os.path.isdir(target):
+            console.print(f"[red]✗ Not found: {target}[/red]")
+            return
+
+        # Run all engines and correlate
+        console.print(f"\n[dim]Correlating findings in {target}...[/dim]\n")
+        correlated = {}
+        files = [os.path.join(r, f) for r, _, fs in os.walk(target)
+                 for f in fs if not f.startswith('.')][:50]
+
+        for fpath in files:
+            fname = os.path.basename(fpath)
+            try:
+                findings = self.detector.scan_file(fpath)
+                if findings:
+                    for f in findings:
+                        ftype = f.get("type", "unknown")
+                        if ftype not in correlated:
+                            correlated[ftype] = []
+                        correlated[ftype].append({"file": fname, **f})
+            except Exception:
+                pass
+
+        if not correlated:
+            console.print("[green]✓ No correlated threats found.[/green]")
+            return
+
+        for ftype, instances in sorted(correlated.items(), key=lambda x: -len(x[1])):
+            console.print(f"  [bold red]{ftype}[/bold red] ({len(instances)} instances)")
+            for inst in instances[:5]:
+                console.print(f"    {inst['file']}: {inst.get('detail', '')[:80]}")
+
+    def _tagged_events(self):
+        """View events by tags."""
+        console.print()
+        console.print(Panel("[bold blue]🏷 TAGGED EVENTS[/bold blue]", border_style="blue"))
+        tags_path = os.path.expanduser("~/.polyglot/tags.json")
+        if not os.path.exists(tags_path):
+            console.print("[dim]No tags yet. Tags are created during investigation.[/dim]")
+            return
+        try:
+            with open(tags_path) as f:
+                tags = json.load(f)
+            for tag, events in tags.items():
+                console.print(f"\n  [bold cyan]#{tag}[/bold cyan] ({len(events)} events)")
+                for ev in events[:5]:
+                    console.print(f"    [dim]{ev}[/dim]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def _bookmark_incidents(self):
+        """Manage bookmarked incidents."""
+        console.print()
+        console.print(Panel("[bold blue]🔖 BOOKMARK INCIDENTS[/bold blue]", border_style="blue"))
+        bm_path = os.path.expanduser("~/.polyglot/bookmarks.json")
+        if not os.path.exists(bm_path):
+            console.print("[dim]No bookmarks yet.[/dim]")
+            add = self.safe_confirm("[cyan]Add a bookmark?[/cyan]", default=False)
+            if add:
+                note = self.safe_input("[cyan]Bookmark note[/cyan]")
+                if note:
+                    bookmarks = [{"time": time.strftime("%Y-%m-%d %H:%M:%S"), "note": note}]
+                    os.makedirs(os.path.dirname(bm_path), exist_ok=True)
+                    with open(bm_path, "w") as f:
+                        json.dump(bookmarks, f, indent=2)
+                    console.print("[green]✓ Bookmark saved.[/green]")
+            return
+        try:
+            with open(bm_path) as f:
+                bookmarks = json.load(f)
+            for i, bm in enumerate(bookmarks):
+                console.print(f"  [cyan]{i+1}[/cyan] │ [{bm.get('time', '')}] {bm.get('note', '')}")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def _export_investigation(self):
+        """Export investigation data."""
+        console.print()
+        console.print(Panel("[bold blue]📤 EXPORT INVESTIGATION[/bold blue]", border_style="blue"))
+        export_path = self.safe_input("[bold cyan]Export path[/bold cyan]",
+                                       default="investigation_export.json")
+        if export_path is None: return
+
+        data = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "stats": dict(self.stats),
+            "alerts": list(self.alerts),
+            "audit_log": [],
+        }
+
+        # Include audit log
+        audit_path = os.path.expanduser("~/.polyglot/audit.jsonl")
+        if os.path.exists(audit_path):
+            try:
+                with open(audit_path) as f:
+                    data["audit_log"] = [json.loads(l) for l in f.readlines()[-500:]]
+            except Exception:
+                pass
+
+        with open(export_path, "w") as f:
+            json.dump(data, f, indent=2, default=str)
+        console.print(f"[green]✓ Investigation exported: {export_path}[/green]")
+
+    def _notes_sidebar(self):
+        """Investigation notes."""
+        console.print()
+        console.print(Panel("[bold blue]📝 NOTES SIDEBAR[/bold blue]", border_style="blue"))
+        notes_path = os.path.expanduser("~/.polyglot/notes.md")
+        if os.path.exists(notes_path):
+            with open(notes_path) as f:
+                content = f.read()
+            if content:
+                console.print(content[:2000])
+                if len(content) > 2000:
+                    console.print(f"\n[dim]... ({len(content)} chars total)[/dim]")
+
+        console.print("\n[dim]Enter note (empty to skip):[/dim]")
+        note = self.safe_input("[cyan]Note[/cyan]")
+        if note:
+            os.makedirs(os.path.dirname(notes_path), exist_ok=True)
+            with open(notes_path, "a") as f:
+                f.write(f"\n## {time.strftime('%Y-%m-%d %H:%M:%S')}\n{note}\n")
+            console.print("[green]✓ Note saved.[/green]")
+
+    def _evidence_folder(self):
+        """Manage evidence folder."""
+        console.print()
+        console.print(Panel("[bold blue]📁 EVIDENCE FOLDER[/bold blue]", border_style="blue"))
+        evidence_dir = os.path.expanduser("~/.polyglot/evidence")
+        os.makedirs(evidence_dir, exist_ok=True)
+
+        console.print(f"[dim]Evidence directory: {evidence_dir}[/dim]\n")
+
+        # List existing evidence
+        evidence = list(Path(evidence_dir).glob("*"))
+        if evidence:
+            for ef in sorted(evidence, key=lambda p: p.stat().st_mtime, reverse=True)[:20]:
+                size = ef.stat().st_size
+                mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(ef.stat().st_mtime))
+                console.print(f"  [cyan]{ef.name}[/cyan] ({size:,} bytes, {mtime})")
+
+        console.print("\n[cyan]1[/cyan] │ Add file to evidence")
+        console.print("[cyan]2[/cyan] │ Export evidence folder")
+        choice = self.safe_input("[cyan]Action[/cyan]", choices=["1", "2"])
+        if choice == "1":
+            fpath = self.safe_input("[cyan]File to add[/cyan]")
+            if fpath and os.path.isfile(fpath):
+                import shutil
+                dest = os.path.join(evidence_dir, os.path.basename(fpath))
+                shutil.copy2(fpath, dest)
+                console.print(f"[green]✓ Added to evidence: {dest}[/green]")
+        elif choice == "2":
+            console.print(f"[dim]Evidence folder: {evidence_dir}[/dim]")
+
+    # ── Benchmark & Fuzzing Menu ─────────────────────────────────
+
+    def menu_benchmark(self):
+        console.print()
+        console.print(Panel("[bold yellow]🧪 BENCHMARK & FUZZING[/bold yellow]", border_style="yellow"))
+        console.print("  [yellow]1[/yellow] │ Generate Benchmark Dataset")
+        console.print("  [yellow]2[/yellow] │ Run CI Regression Tests")
+        console.print("  [yellow]3[/yellow] │ Run Fuzzing Harness")
+        console.print("  [yellow]4[/yellow] │ ONNX Model Export + Validate")
+
+        choice = self.safe_input("\n[bold yellow]Select[/bold yellow]",
+                                 choices=["1","2","3","4"], default="1")
+        if choice is None: return
+
+        if choice == "1":
+            console.print("\n[cyan]Generating benchmark dataset...[/cyan]")
+            try:
+                from engines.onnx_export import BenchmarkGenerator
+                gen = BenchmarkGenerator()
+                result = gen.generate()
+                console.print(f"[green]✓ Generated {result.get('total_files', 0)} benchmark files[/green]")
+                for name, info in result.get("tests", {}).items():
+                    console.print(f"  {name}: {info.get('count', 0)} files "
+                                f"(expect {info.get('expected_detections', 0)} detections)")
+            except Exception as e:
+                console.print(f"[red]✗ Error: {e}[/red]")
+
+        elif choice == "2":
+            console.print("\n[cyan]Running CI regression tests...[/cyan]")
+            try:
+                from engines.onnx_export import CIRegressionTester
+                tester = CIRegressionTester()
+                results = tester.run()
+                console.print(f"\n[bold]Results: {results['passed']}/{results['total']} passed[/bold]")
+                for t in results.get("tests", []):
+                    icon = "[green]✓[/green]" if t["status"] == "PASS" else "[red]✗[/red]"
+                    console.print(f"  {icon} {t['name']}: {t['actual']}/{t['expected']} detections "
+                                f"({t['files_tested']} files)")
+            except Exception as e:
+                console.print(f"[red]✗ Error: {e}[/red]")
+
+        elif choice == "3":
+            iterations = self.safe_input("[cyan]Iterations[/cyan]", default="100")
+            if iterations is None: return
+            console.print(f"\n[cyan]Running fuzzer ({iterations} iterations)...[/cyan]")
+            try:
+                from engines.onnx_export import FuzzingHarness
+                fuzzer = FuzzingHarness()
+                results = fuzzer.fuzz_file_formats(int(iterations))
+                console.print(f"\n[bold]Fuzzing Results:[/bold]")
+                console.print(f"  Iterations: {results['iterations']}")
+                console.print(f"  [green]Handled: {results['handled']}[/green]")
+                console.print(f"  [yellow]Errors: {results['errors']}[/yellow]")
+                console.print(f"  [red]Crashes: {results['crashes']}[/red]")
+                for crash in results.get("crash_details", [])[:5]:
+                    console.print(f"  [red]  Crash #{crash['iteration']}: {crash['error'][:80]}[/red]")
+            except Exception as e:
+                console.print(f"[red]✗ Error: {e}[/red]")
+
+        elif choice == "4":
+            console.print("\n[cyan]Exporting model to ONNX...[/cyan]")
+            try:
+                from engines.onnx_export import ONNXExporter
+                exporter = ONNXExporter()
+                result = exporter.export()
+                if result.get("status") == "success":
+                    console.print(f"[green]✓ Exported: {result['output']}[/green]")
+                    # Validate
+                    console.print("[cyan]Validating ONNX model...[/cyan]")
+                    val = exporter.validate(result["output"])
+                    if val.get("status") == "valid":
+                        console.print(f"[green]✓ Valid ONNX model[/green]")
+                        console.print(f"  Providers: {val.get('providers', [])}")
+                    else:
+                        console.print(f"[yellow]Validation: {val}[/yellow]")
+                else:
+                    console.print(f"[red]✗ {result.get('error')}[/red]")
+            except Exception as e:
+                console.print(f"[red]✗ Error: {e}[/red]")
 
 
 # ── Direct CLI Commands ──────────────────────────────────────
