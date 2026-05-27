@@ -248,57 +248,71 @@ def scan_file(filepath: str, verbose: bool = False) -> list:
                             f'Trailing data has elevated entropy ({entropy:.2f}/8.0).'
                         ))
 
-    # 4. Scan ENTIRE file for embedded executable signatures
-    for sig_bytes, sig_name in EXE_SIGNATURES.items():
-        positions = []
-        start = 0
-        while True:
-            pos = data.find(sig_bytes, start)
-            if pos == -1:
-                break
-            # Skip the first occurrence if it's at byte 0 (that's the declared format)
-            if pos == 0 and declared_format in ('exe', 'elf'):
+    # 4. Scan for embedded executable signatures (with validation)
+    SAFE_EXT = {'.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.htm', '.xhtml',
+                '.php', '.asp', '.aspx', '.jsp', '.vue', '.svelte', '.rb', '.pl',
+                '.sh', '.bash', '.zsh', '.ps1', '.bat', '.cmd', '.vbs', '.lua',
+                '.md', '.txt', '.rst', '.csv', '.json', '.xml', '.yaml', '.yml',
+                '.toml', '.ini', '.cfg', '.conf', '.log', '.sql',
+                '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.rs'}
+
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in SAFE_EXT:
+        for sig_bytes, sig_name in EXE_SIGNATURES.items():
+            positions = []
+            start = 0
+            while True:
+                pos = data.find(sig_bytes, start)
+                if pos == -1:
+                    break
+                # Skip the first occurrence if it's at byte 0 (that's the declared format)
+                if pos == 0 and declared_format in ('exe', 'elf'):
+                    start = pos + 1
+                    continue
+                positions.append(pos)
                 start = pos + 1
-                continue
-            positions.append(pos)
-            start = pos + 1
 
-        for pos in positions:
-            # Skip if it's inside the cover's normal data area
-            if declared_format in FORMAT_MARKERS:
-                fmt = FORMAT_MARKERS[declared_format]
-                marker_pos = find_marker(data, fmt['end_marker'])
-                if marker_pos != -1 and pos < marker_pos:
-                    # Validate it's a REAL PE/ELF header, not random bytes
-                    is_valid = False
-                    if sig_bytes == b'MZ':
-                        is_valid = _validate_pe_at(data, pos)
-                    elif sig_bytes == b'\x7fELF':
-                        is_valid = _validate_elf_at(data, pos)
-                    else:
-                        is_valid = True  # Other signatures are fine
+            for pos in positions:
+                # Skip if it's inside the cover's normal data area
+                if declared_format in FORMAT_MARKERS:
+                    fmt = FORMAT_MARKERS[declared_format]
+                    marker_pos = find_marker(data, fmt['end_marker'])
+                    if marker_pos != -1 and pos < marker_pos:
+                        # Validate it's a REAL PE/ELF header, not random bytes
+                        is_valid = False
+                        if sig_bytes == b'MZ':
+                            is_valid = _validate_pe_at(data, pos)
+                        elif sig_bytes == b'\x7fELF':
+                            is_valid = _validate_elf_at(data, pos)
+                        else:
+                            is_valid = True  # Other signatures are fine
 
-                    if is_valid:
+                        if is_valid:
+                            detections.append(Detection(
+                                'HIGH', 'EMBEDDED_EXE_IN_BODY',
+                                f'{sig_name} VALID header found at byte {pos:,} (inside {fmt["name"]} data). '
+                                f'Confirmed valid PE/ELF structure.'
+                            ))
+                    elif marker_pos != -1 and pos > marker_pos:
                         detections.append(Detection(
-                            'HIGH', 'EMBEDDED_EXE_IN_BODY',
-                            f'{sig_name} VALID header found at byte {pos:,} (inside {fmt["name"]} data). '
-                            f'Confirmed valid PE/ELF structure.'
+                            'HIGH', 'EXE_AFTER_MARKER',
+                            f'{sig_name} found at byte {pos:,} (AFTER {fmt["end_name"]}). '
+                            f'Definite polyglot indicator.'
                         ))
-                elif marker_pos != -1 and pos > marker_pos:
-                    detections.append(Detection(
-                        'HIGH', 'EXE_AFTER_MARKER',
-                        f'{sig_name} found at byte {pos:,} (AFTER {fmt["end_name"]}). '
-                        f'Definite polyglot indicator.'
-                    ))
 
-    # 5. Scan for suspicious script patterns
-    for sig_bytes, sig_name in SCRIPT_SIGNATURES.items():
-        pos = data.find(sig_bytes)
-        if pos != -1:
-            detections.append(Detection(
-                'HIGH', 'SUSPICIOUS_SCRIPT',
-                f'{sig_name} found at byte {pos:,} — possible code injection or script embedding.'
-            ))
+    # 5. Scan for suspicious script patterns (ONLY in trailing data)
+    if ext not in SAFE_EXT and declared_format in FORMAT_MARKERS:
+        fmt = FORMAT_MARKERS[declared_format]
+        marker_pos = find_marker(data, fmt['end_marker'])
+        if marker_pos != -1:
+            trailing = data[marker_pos + len(fmt['end_marker']):]
+            for sig_bytes, sig_name in SCRIPT_SIGNATURES.items():
+                pos = trailing.find(sig_bytes)
+                if pos != -1:
+                    detections.append(Detection(
+                        'HIGH', 'SUSPICIOUS_SCRIPT',
+                        f'{sig_name} found at byte {marker_pos + len(fmt["end_marker"]) + pos:,} — script in trailing data.'
+                    ))
 
     # 6. Double extension check
     if '..' in filename:

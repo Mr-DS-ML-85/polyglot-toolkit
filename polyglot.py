@@ -112,12 +112,13 @@ def run_build(args):
         print("  --encrypt                                     XOR encrypt payload")
         print("  --fud                                         FUD cryptor obfuscation")
         print("  --mime                                        MIME-type confusion")
+        print("  --stealth                                     Image-embedding mode (works on all platforms)")
         print("  --output <path>                               Output file path")
         sys.exit(1)
 
     cover_path, payload_path = args[0], args[1]
     container = "jpeg"
-    encrypt = fud = mime = False
+    encrypt = fud = mime = stealth = False
     output = None
     payload_type = None
     target_os = "windows"
@@ -136,6 +137,8 @@ def run_build(args):
             fud = True; i += 1
         elif args[i] == "--mime":
             mime = True; i += 1
+        elif args[i] == "--stealth":
+            stealth = True; i += 1
         elif args[i] == "--output" and i + 1 < len(args):
             output = args[i + 1]; i += 2
         else:
@@ -169,7 +172,8 @@ def run_build(args):
                                           container_type=container, encrypt=encrypt,
                                           fud=fud, mime_confuse=mime,
                                           payload_type=payload_type,
-                                          target_os=plat_info['os'])
+                                          target_os=plat_info['os'],
+                                          stealth=stealth)
                     print(f"\n  [{plat_name.upper()}] Output: {plat_output}")
                     print(f"    Payload Type: {stats.get('payload_type', 'N/A')}")
                     print(f"    Total:        {stats['output_size']:,} bytes")
@@ -182,7 +186,7 @@ def run_build(args):
         stats = builder.build(cover_path, payload_path, output,
                               container_type=container, encrypt=encrypt,
                               fud=fud, mime_confuse=mime, payload_type=payload_type,
-                              target_os=target_os)
+                              target_os=target_os, stealth=stealth)
         print(f"\n  Output:       {stats['output']}")
         print(f"  Container:    {stats['container_type']}")
         print(f"  Target OS:    {target_os}")
@@ -255,7 +259,18 @@ def run_scan(args):
                 try:
                     feats = extract_features_from_file(fpath)
                     pred = model.predict_single(feats)
-                    ml_info = f"  ML: {pred['label']} ({pred['risk_score']:.1f}% risk, {pred['risk_level']})"
+                    ml_risk = pred['risk_score']
+                    ml_label = pred['label']
+                    ml_level = pred['risk_level']
+                    # Boost ML score when rule-based findings exist
+                    if findings:
+                        sev_map = {'critical': 95, 'high': 80, 'warning': 50, 'info': 20}
+                        max_f = max(sev_map.get(f['severity'], 0) for f in findings)
+                        if max_f > ml_risk:
+                            ml_risk = float(max_f)
+                            ml_label = "polyglot"
+                            ml_level = "critical" if ml_risk >= 90 else "high" if ml_risk >= 70 else "warning"
+                    ml_info = f"  ML: {ml_label} ({ml_risk:.1f}% risk, {ml_level})"
                 except Exception:
                     pass
 
@@ -267,6 +282,21 @@ def run_scan(args):
                     print(f"    [{f['severity'].upper()}] {f['type']}: {f['detail']}")
                 if ml_info:
                     print(f"   {ml_info}")
+                # Write to audit log so TUI/GUI/WebUI can see it
+                try:
+                    audit_path = os.path.expanduser("~/.polyglot/audit.jsonl")
+                    os.makedirs(os.path.dirname(audit_path), exist_ok=True)
+                    from datetime import datetime
+                    import json
+                    with open(audit_path, "a") as af:
+                        for ff in findings:
+                            entry = {"time": datetime.now().isoformat(), "file": fname,
+                                     "severity": ff.get("severity","warning"), "type": ff.get("type",""),
+                                     "detail": ff.get("detail",""), "offset": ff.get("offset",0),
+                                     "source": "cli"}
+                            af.write(json.dumps(entry) + "\n")
+                except Exception:
+                    pass
             elif findings:
                 print(f"  ○ {fname} — minor warnings")
                 if ml_info:

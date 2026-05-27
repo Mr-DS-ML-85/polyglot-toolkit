@@ -146,22 +146,12 @@ Flask REST API + embedded web dashboard with 12 endpoints.
 - Notes Sidebar (markdown notes)
 - Evidence Folder
 
-### Menu 12: Benchmark & Fuzzing
+### Menu 12: Benchmark & ONNX
 - Generate Benchmark Dataset (clean images, PE polyglots, script polyglots)
 - CI Regression Testing (automated detection verification)
-- Fuzzing Harness (8 mutation strategies, crash detection)
 - ONNX Model Export + Validation
 
-### Menu 13: Payload & Evasion
-- PowerShell Obfuscation (9 techniques: string_concat, base64, xor, amsi_bypass, env_var, caret, tick, format_string, reverse)
-- VBA Macro Generation (4 techniques with sandbox detection)
-- JavaScript Loader Generation (6 techniques: eval_atob, fetch, xhr, wscript, mshta, regsvr32)
-- Fileless Execution (registry, WMI, scheduled task, DLL injection, process hollowing)
-- Sandbox Detection Payload (PowerShell, VBA, JavaScript)
-- AV Behavior Prediction (keyword analysis, evasion indicator detection)
-- Static Detection Scoring (multi-factor risk scoring 0-100)
-
-### Menu 14: Session & Workspace
+### Menu 13: Session & Workspace
 - Session Manager (create, view, close sessions with full event logging)
 - Pinned Files (quick access)
 - Recent Files (last 100)
@@ -173,7 +163,7 @@ Flask REST API + embedded web dashboard with 12 endpoints.
 - Regex Tester (pattern matching with groups)
 - Auto-detect URLs/IPs/Domains/Emails from text
 
-### Menu 15: Network Tools
+### Menu 14: Network Tools
 - DNS Lookup (A, AAAA, MX, NS, TXT, CNAME, SOA via raw socket)
 - Whois Lookup (direct socket to whois servers, parsed fields)
 - TCP Connect Tester (single port or common ports scan)
@@ -181,7 +171,7 @@ Flask REST API + embedded web dashboard with 12 endpoints.
 - Request History (persistent JSONL log)
 - Auto-detect URLs/IPs/Emails from text
 
-### Menu 16: Hex Editor
+### Menu 15: Hex Editor
 - Hex Dump with polyglot red-mark highlighting (overlay/extra data in red)
 - Hex Pattern Search
 - ASCII String Search
@@ -189,26 +179,33 @@ Flask REST API + embedded web dashboard with 12 endpoints.
 - File Diff (byte-by-byte comparison)
 - Format Detection (30+ format signatures with region highlighting)
 
-### Menu 17: Exploitation & Attack Paths
-- Vulnerability Correlation (8 CVE patterns: EternalBlue, Log4Shell, Follina, etc.)
-- Credential Chain Analysis (passwords, API keys, AWS creds, private keys, connection strings)
-- Attack Chain Analysis (MITRE ATT&CK mapping: delivery, execution, persistence, privesc, evasion, cred access, lateral movement, exfiltration)
-- Risk Scoring (7 weighted factors: entropy, format anomaly, YARA, ML, stego, archive depth, obfuscation)
-- Generate Report (Markdown + PDF/HTML with full breakdown)
-
-### Menu 18: Blue Side Monitoring
+### Menu 16: Blue Side Monitoring
 - Network Logs
 - Request History
 - WebSocket Monitor
 - DNS Lookup
 - Whois Lookup
 - TCP Connect Tester
-- Raw Request Editor
 - Connection Viewer
 - Process Viewer
-- Alerts Panel
 - File Change Monitor
-- Workspace Audit Log
+
+### Menu 17: Quarantine Vault
+- View quarantined files with threat details
+- Restore quarantined files
+- Delete quarantined files permanently
+- Search quarantine history
+- Export quarantine log
+
+### Menu 18: Comprehensive Report
+- Runs all major analysis engines on a target
+- File Detector (rule-based + ML)
+- File Sanitizer
+- Deep Analysis (format, stego, PE, ELF, office, archive)
+- Network IOCs (IPs, domains, URLs)
+- Blue Side Indicators
+- Quarantine Threats
+- Generates unified report file in ~/.polyglot/reports/
 
 ## Engines
 

@@ -336,16 +336,27 @@ class ScanWorker(QThread):
                     pred = self.model.predict_single(feats)
                     yara_matches, _ = self.yara.scan_file(fpath)
                     findings = self.detector.scan_file(fpath)
+                    ml_risk = pred['risk_score']
+                    ml_label = pred['label']
+                    ml_level = pred['risk_level']
+                    # Boost ML score when rule-based findings exist
+                    if findings:
+                        sev_map = {'critical': 95, 'high': 80, 'warning': 50, 'info': 20}
+                        max_finding = max(sev_map.get(f['severity'], 0) for f in findings)
+                        if max_finding > ml_risk:
+                            ml_risk = float(max_finding)
+                            ml_label = "polyglot"
+                            ml_level = "critical" if ml_risk >= 90 else "high" if ml_risk >= 70 else "warning" if ml_risk >= 40 else "info"
                     r = {
                         'file': os.path.basename(fpath), 'path': fpath,
-                        'ml_label': pred['label'], 'ml_risk': pred['risk_score'],
-                        'ml_conf': pred['confidence'], 'ml_level': pred['risk_level'],
+                        'ml_label': ml_label, 'ml_risk': ml_risk,
+                        'ml_conf': pred['confidence'], 'ml_level': ml_level,
                         'yara_count': len(yara_matches),
                         'yara_rules': [m.rule_name for m in yara_matches],
                         'findings': len(findings),
-                        'severity': 'critical' if pred['risk_score']>=80 else 'high' if pred['risk_score']>=60 else 'warning' if pred['risk_score']>=40 else 'clean',
+                        'severity': 'critical' if ml_risk>=80 else 'high' if ml_risk>=60 else 'warning' if ml_risk>=40 else 'clean',
                     }
-                    if pred['risk_score'] >= 50:
+                    if ml_risk >= 50:
                         threats += 1
                         threat_files.append((fpath, findings))
                 else:
@@ -360,6 +371,21 @@ class ScanWorker(QThread):
                     if crit:
                         threats += 1
                         threat_files.append((fpath, findings))
+                        # Write to audit log
+                        try:
+                            audit_path = os.path.expanduser("~/.polyglot/audit.jsonl")
+                            os.makedirs(os.path.dirname(audit_path), exist_ok=True)
+                            import json as _json
+                            from datetime import datetime as _dt
+                            with open(audit_path, "a") as _af:
+                                for _ff in crit:
+                                    _entry = {"time": _dt.now().isoformat(), "file": os.path.basename(fpath),
+                                             "severity": _ff.get("severity","warning"), "type": _ff.get("type",""),
+                                             "detail": _ff.get("detail",""), "offset": _ff.get("offset",0),
+                                             "source": "gui"}
+                                    _af.write(_json.dumps(_entry) + "\n")
+                        except Exception:
+                            pass
                 results.append(r)
                 self.result.emit(r)
             except Exception as e:
@@ -548,7 +574,7 @@ class PolyglotApp(QMainWindow):
 
         self.nav = []
         items = [("◈","Dashboard",0),("◆","Builder",1),("⚠","Scanner",2),("▶","Monitor",3),
-                 ("🧠","ML Training",4),("🛡","Quarantine",5),("📋","YARA Rules",6),("📜","Logs",7),("⚙","Settings",8)]
+                 ("🧠","ML Training",4),("🛡","Quarantine",5),("📋","YARA Rules",6),("📜","Logs",7),("⚙","Settings",8),("📊","Report",9)]
         for icon,label,idx in items:
             b = QPushButton(f"  {icon}   {label}"); b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setStyleSheet(self._nav_s(False)); b.clicked.connect(lambda checked,i=idx,b=b:self._switch(i,b))
@@ -568,6 +594,7 @@ class PolyglotApp(QMainWindow):
         self.stack.addWidget(self._pg_yara())
         self.stack.addWidget(self._pg_logs())
         self.stack.addWidget(self._pg_settings())
+        self.stack.addWidget(self._pg_report())
         ml.addWidget(self.stack)
         self._switch(0, self.nav[0])
 
@@ -615,18 +642,23 @@ class PolyglotApp(QMainWindow):
         l.addWidget(self._header("◆ Polyglot Builder", T.RED))
 
         ic, il = card("Input Files","📁")
-        r = QHBoxLayout(); r.addWidget(QLabel("Cover:")); self.b_cover = inp("JPEG/PNG/GIF/PDF/ZIP/MP4..."); r.addWidget(self.b_cover,1)
+        r = QHBoxLayout(); r.addWidget(QLabel("Cover:")); self.b_cover = inp("JPEG/PNG/GIF/PDF/ZIP/MP4/XLSX/DOCX..."); r.addWidget(self.b_cover,1)
         b=btn("Browse",T.DIM); b.clicked.connect(lambda:self._browse(self.b_cover)); r.addWidget(b); il.addLayout(r)
-        r = QHBoxLayout(); r.addWidget(QLabel("Payload:")); self.b_payload = inp("EXE/BAT/VBS/script..."); r.addWidget(self.b_payload,1)
+        r = QHBoxLayout(); r.addWidget(QLabel("Payload:")); self.b_payload = inp("EXE/ELF/Mach-O/BAT/VBS/script..."); r.addWidget(self.b_payload,1)
         b=btn("Browse",T.DIM); b.clicked.connect(lambda:self._browse(self.b_payload)); r.addWidget(b); il.addLayout(r)
         l.addWidget(ic)
 
         oc, ol = card("Attack Options","⚙")
         g = QGridLayout(); g.setSpacing(12)
-        g.addWidget(QLabel("Container:"),0,0); self.b_type = combo(['JPEG','PNG','GIF','PDF','ZIP','MP4']); g.addWidget(self.b_type,0,1)
+        # Row 0: Container + Vector
+        g.addWidget(QLabel("Container:"),0,0); self.b_type = combo(['JPEG','PNG','GIF','PDF','ZIP','MP4','XLSX','DOCX']); g.addWidget(self.b_type,0,1)
         g.addWidget(QLabel("Vector:"),0,2); self.b_vector = combo(['Standard Polyglot','FUD Cryptor','MIME Confusion','Covert Embedding']); g.addWidget(self.b_vector,0,3)
-        h = QHBoxLayout(); self.b_enc = QCheckBox("XOR Encrypt"); self.b_fud = QCheckBox("FUD Obfuscation"); self.b_mime = QCheckBox("MIME Confusion")
-        h.addWidget(self.b_enc); h.addWidget(self.b_fud); h.addWidget(self.b_mime); h.addStretch(); g.addLayout(h,1,0,1,4)
+        # Row 1: Payload Type + Target OS
+        g.addWidget(QLabel("Payload Type:"),1,0); self.b_payload_type = combo(['Auto','EXE','VBS','PowerShell','Bash','Sh','Python','AppleScript','XLSX','DOCX']); g.addWidget(self.b_payload_type,1,1)
+        g.addWidget(QLabel("Target OS:"),1,2); self.b_target_os = combo(['Windows','Linux','macOS','All']); g.addWidget(self.b_target_os,1,3)
+        # Row 2: Checkboxes
+        h = QHBoxLayout(); self.b_enc = QCheckBox("XOR Encrypt"); self.b_fud = QCheckBox("FUD Obfuscation"); self.b_mime = QCheckBox("MIME Confusion"); self.b_stealth = QCheckBox("Stealth Mode")
+        h.addWidget(self.b_enc); h.addWidget(self.b_fud); h.addWidget(self.b_mime); h.addWidget(self.b_stealth); h.addStretch(); g.addLayout(h,2,0,1,4)
         ol.addLayout(g); l.addWidget(oc)
 
         bb = btn("◆ BUILD POLYGLOT", T.RED); bb.setFixedHeight(48); bb.clicked.connect(self._run_builder)
@@ -802,6 +834,102 @@ class PolyglotApp(QMainWindow):
         l.addStretch()
         return p
 
+    def _pg_report(self):
+        p = QWidget(); l = QVBoxLayout(p); l.setContentsMargins(30,25,30,25); l.setSpacing(15)
+        l.addWidget(self._header("📊 Comprehensive Report", T.FG))
+
+        # Target
+        tc, tl = card("Target", "🎯")
+        r = QHBoxLayout()
+        self.r_target = QLineEdit(); self.r_target.setPlaceholderText("File or directory to analyze...")
+        self.r_target.setStyleSheet(f"background:{T.BG_IN};color:{T.FG};border:1px solid {T.BORDER};border-radius:4px;padding:8px")
+        browse = QPushButton("Browse"); browse.setCursor(Qt.CursorShape.PointingHandCursor)
+        browse.setStyleSheet(f"background:{T.BLUE};color:white;border:none;border-radius:4px;padding:8px 16px")
+        browse.clicked.connect(self._r_browse)
+        r.addWidget(self.r_target, 1); r.addWidget(browse)
+        tl.addLayout(r)
+
+        # Sections
+        sc, sl = card("Sections to Include", "📋")
+        self.r_sections = {}
+        sections = [
+            ("1", "🔍 File Detector (rule-based + ML)", True),
+            ("2", "🛡 File Sanitizer", True),
+            ("3", "🔬 Deep Analysis", True),
+            ("4", "🌐 Network IOCs", True),
+            ("5", "🔵 Blue Side Indicators", True),
+            ("6", "🔒 Quarantine Threats", False),
+        ]
+        for key, label, default in sections:
+            cb = QCheckBox(label); cb.setChecked(default)
+            cb.setStyleSheet(f"color:{T.FG}")
+            sl.addWidget(cb)
+            self.r_sections[key] = cb
+        l.addWidget(tc)
+
+        # Generate button
+        btn = QPushButton("📊 Generate Report")
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet(f"background:{T.GREEN};color:white;border:none;border-radius:8px;padding:14px;font-size:15px;font-weight:bold")
+        btn.clicked.connect(self._run_report)
+        l.addWidget(btn)
+
+        # Output area
+        self.r_output = QTextEdit(); self.r_output.setReadOnly(True)
+        self.r_output.setStyleSheet(f"background:{T.BG_IN};color:{T.FG};border:1px solid {T.BORDER};border-radius:6px;font-family:monospace;font-size:12px")
+        l.addWidget(self.r_output, 1)
+
+        l.addStretch()
+        return p
+
+    def _r_browse(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Target Directory")
+        if path:
+            self.r_target.setText(path)
+
+    def _run_report(self):
+        target = self.r_target.text().strip()
+        if not target or not os.path.exists(target):
+            QMessageBox.warning(self, "Error", "Please select a valid target.")
+            return
+
+        self.r_output.clear()
+        self.r_output.append("Generating comprehensive report...\n")
+
+        try:
+            from polyglot_tui import PolyglotTUI
+            tui = PolyglotTUI()
+
+            # Determine which sections
+            selected = [k for k, cb in self.r_sections.items() if cb.isChecked()]
+            section_str = ",".join(selected) if len(selected) < 6 else "all"
+
+            # Run report using TUI engine
+            import io, contextlib
+            f = io.StringIO()
+            with contextlib.redirect_stdout(f), contextlib.redirect_stderr(f):
+                import unittest.mock
+                with unittest.mock.patch.object(tui, 'safe_input', side_effect=[target, section_str]):
+                    tui.menu_report()
+
+            # Find the generated report
+            report_dir = os.path.expanduser("~/.polyglot/reports")
+            if os.path.exists(report_dir):
+                reports = sorted(os.listdir(report_dir), reverse=True)
+                if reports:
+                    report_path = os.path.join(report_dir, reports[0])
+                    with open(report_path, 'r') as f:
+                        content = f.read()
+                    self.r_output.setPlainText(content)
+                    self._log(f"Report generated: {report_path}", "success")
+                    return
+
+            self.r_output.append("Report generation completed. Check ~/.polyglot/reports/")
+
+        except Exception as e:
+            self.r_output.append(f"Error: {e}")
+            self._log(f"Report failed: {e}", "critical")
+
     # ── Helpers ──────────────────────────────────────────────
 
     def _header(self, text, color=T.FG):
@@ -848,12 +976,20 @@ class PolyglotApp(QMainWindow):
         cover = self.b_cover.text().strip(); payload = self.b_payload.text().strip()
         if not cover or not os.path.isfile(cover): QMessageBox.warning(self,"Error","Select a valid cover file"); return
         if not payload or not os.path.isfile(payload): QMessageBox.warning(self,"Error","Select a valid payload file"); return
-        ext_map={'JPEG':'.jpg','PNG':'.png','GIF':'.gif','PDF':'.pdf','ZIP':'.zip','MP4':'.mp4'}
+        ext_map={'JPEG':'.jpg','PNG':'.png','GIF':'.gif','PDF':'.pdf','ZIP':'.zip','MP4':'.mp4','XLSX':'.xlsx','DOCX':'.docx'}
         ct = self.b_type.currentText()
         output,_ = QFileDialog.getSaveFileName(self,"Save Polyglot As",f"polyglot{ext_map.get(ct,'.bin')}",f"{ct} Files (*{ext_map.get(ct,'.*')});;All Files (*)")
         if not output: return
+        # Get payload type and target OS
+        pt = self.b_payload_type.currentText()
+        payload_type = None if pt == 'Auto' else pt.lower()
+        target_os = self.b_target_os.currentText().lower()
+        if target_os == 'all': target_os = 'all'
         try:
-            stats = self.builder.build(cover,payload,output,ct.lower(),self.b_enc.isChecked(),self.b_fud.isChecked(),self.b_mime.isChecked())
+            stats = self.builder.build(cover, payload, output, ct.lower(),
+                                       self.b_enc.isChecked(), self.b_fud.isChecked(), self.b_mime.isChecked(),
+                                       payload_type=payload_type, target_os=target_os,
+                                       stealth=self.b_stealth.isChecked())
             for k,v in stats.items(): append_log(self.b_log, f"  {k}: {v}", T.GREEN)
             self.counts['built'] += 1; self.d_built._val.setText(str(self.counts['built']))
             self._log(f"Polyglot built: {output}","success")

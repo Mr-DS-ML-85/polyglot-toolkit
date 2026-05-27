@@ -466,3 +466,99 @@ class RequestHistory:
         """Clear history."""
         if os.path.exists(self.history_file):
             os.remove(self.history_file)
+
+
+# ── IPInfo Lookup ───────────────────────────────────────────────────────────
+
+class IPInfoLookup:
+    """IP geolocation and info lookup via ipinfo.io (free, no key needed)."""
+
+    def lookup(self, ip: str) -> Dict[str, Any]:
+        """Look up IP info (geo, org, ASN, hostname)."""
+        import urllib.request
+        import urllib.error
+
+        result: Dict[str, Any] = {"ip": ip, "timestamp": datetime.now().isoformat()}
+        try:
+            url = f"https://ipinfo.io/{ip}/json"
+            req = urllib.request.Request(url, headers={"User-Agent": "PolyglotShield/3.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode())
+            result.update({
+                "hostname": data.get("hostname", ""),
+                "city": data.get("city", ""),
+                "region": data.get("region", ""),
+                "country": data.get("country", ""),
+                "loc": data.get("loc", ""),         # lat,lng
+                "org": data.get("org", ""),          # AS#### Org Name
+                "postal": data.get("postal", ""),
+                "timezone": data.get("timezone", ""),
+                "anycast": data.get("anycast", False),
+            })
+        except urllib.error.HTTPError as e:
+            result["error"] = f"HTTP {e.code}: {e.reason}"
+        except Exception as e:
+            result["error"] = str(e)
+
+        # Reverse DNS (always try)
+        try:
+            hostname = socket.gethostbyaddr(ip)[0]
+            result.setdefault("rdns", hostname)
+        except Exception:
+            pass
+
+        return result
+
+    def batch_lookup(self, ips: List[str]) -> List[Dict[str, Any]]:
+        """Look up multiple IPs."""
+        return [self.lookup(ip) for ip in ips]
+
+    def lookup_from_text(self, text: str) -> Dict[str, Any]:
+        """Auto-detect IPs in text and look them all up."""
+        ips = IP_PATTERN.findall(text)
+        if not ips:
+            return {"error": "No IPs found in text", "text_preview": text[:200]}
+        results = self.batch_lookup(list(set(ips)))
+        return {"count": len(results), "results": results}
+
+
+class IPExtractor:
+    """Extract IPs from files, scan results, or arbitrary text and enrich with ipinfo."""
+
+    def extract_from_file(self, filepath: str) -> List[str]:
+        """Extract all IPv4 addresses from any file (text or binary)."""
+        try:
+            with open(filepath, "rb") as f:
+                data = f.read()
+            text = data.decode("utf-8", errors="replace")
+            return list(set(IP_PATTERN.findall(text)))
+        except Exception:
+            return []
+
+    def extract_and_enrich(self, source: str) -> Dict[str, Any]:
+        """Extract IPs from file/text and enrich each with ipinfo.
+
+        source: file path OR raw text string.
+        """
+        if os.path.isfile(source):
+            ips = self.extract_from_file(source)
+            src_type = "file"
+        else:
+            ips = list(set(IP_PATTERN.findall(source)))
+            src_type = "text"
+
+        if not ips:
+            return {"source": source, "type": src_type, "ips_found": 0, "results": []}
+
+        info = IPInfoLookup()
+        enriched = []
+        for ip in sorted(set(ips)):
+            r = info.lookup(ip)
+            enriched.append(r)
+
+        return {
+            "source": source,
+            "type": src_type,
+            "ips_found": len(enriched),
+            "results": enriched,
+        }

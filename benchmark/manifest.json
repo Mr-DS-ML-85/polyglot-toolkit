@@ -1,0 +1,19 @@
+{
+  "generated": "2026-05-27 13:24:39",
+  "samples_per_type": 10,
+  "tests": {
+    "clean_images": {
+      "count": 20,
+      "expected_detections": 0
+    },
+    "polyglot_pe": {
+      "count": 10,
+      "expected_detections": 10
+    },
+    "polyglot_script": {
+      "count": 10,
+      "expected_detections": 10
+    }
+  },
+  "total_files": 40
+}

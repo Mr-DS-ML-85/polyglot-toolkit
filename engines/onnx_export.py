@@ -50,9 +50,14 @@ class ONNXExporter:
         model = CatBoostClassifier()
         model.load_model(self.model_path)
 
-        # Get feature names
-        feature_count = model.feature_count_
-        feature_names = [f"feature_{i}" for i in range(feature_count)]
+        # Get feature count — attribute varies by CatBoost version
+        feature_names = model.feature_names_ or []
+        feature_count = len(feature_names) if feature_names else getattr(model, 'n_features_in_', 0)
+        if feature_count == 0:
+            # Last resort: infer from model structure
+            feature_count = 354  # PolyglotShield default
+        if not feature_names:
+            feature_names = [f"feature_{i}" for i in range(feature_count)]
 
         try:
             # Export to ONNX

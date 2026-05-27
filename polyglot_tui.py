@@ -14,6 +14,7 @@ Usage:
   polyglot recover <file_or_dir>
   polyglot server [--port 8888]
   polyglot monitor <dir>
+  polyglot report <file_or_dir>   Comprehensive security report
 """
 
 import sys
@@ -411,7 +412,7 @@ End Function
 
     def build(self, cover_path, payload_path, output_path,
               container_type="jpeg", encrypt=False, fud=False, mime_confuse=False,
-              payload_type=None, target_os="windows"):
+              payload_type=None, target_os="windows", arch="x86-64", stealth=False):
         with open(cover_path, 'rb') as f:
             cover = f.read()
         with open(payload_path, 'rb') as f:
@@ -483,11 +484,44 @@ End Function
             'xlsx': self._b_zip, 'docx': self._b_zip,  # Office files are ZIP-based
         }
 
-        builder = builders.get(container_type.lower())
-        if not builder:
-            raise ValueError(f"Unsupported: {container_type}")
+        # Detect payload type for overlay polyglots
+        is_pe = payload[:2] == b'MZ'
+        is_elf = payload[:4] == b'\x7fELF'
+        is_macho = payload[:4] in (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf',
+                                    b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe')
+        is_executable = is_pe or is_elf or is_macho
+        is_image = container_type.lower() in ('jpeg', 'jpg', 'png', 'gif')
 
-        polyglot = builder(cover, payload)
+        if stealth:
+            # Stealth mode: always use image-embedding (valid image, works everywhere)
+            builder = builders.get(container_type.lower())
+            if not builder:
+                raise ValueError(f"Unsupported: {container_type}")
+            polyglot = builder(cover, payload)
+        elif is_executable and is_image:
+            # Overlay technique: executable at start, image after EOF
+            if is_pe:
+                polyglot = self._build_pe_polyglot(cover, payload, container_type.lower(), arch=arch)
+            elif is_elf:
+                polyglot = self._build_elf_polyglot(cover, payload, container_type.lower(), arch=arch)
+            elif is_macho:
+                polyglot = self._build_macho_polyglot(cover, payload, container_type.lower(), arch=arch)
+        elif is_image and target_os in ('windows', 'linux', 'macos'):
+            # Raw payload + target_os specified → wrap in platform executable + overlay
+            if target_os == 'windows':
+                polyglot = self._build_pe_polyglot(cover, payload, container_type.lower(), arch=arch)
+            elif target_os == 'linux':
+                if arch == 'arm32':
+                    polyglot = self._build_valid_elf32_arm_stub(payload) + cover
+                else:
+                    polyglot = self._build_elf_polyglot(cover, payload, container_type.lower(), arch=arch)
+            elif target_os == 'macos':
+                polyglot = self._build_macho_polyglot(cover, payload, container_type.lower(), arch=arch)
+        else:
+            builder = builders.get(container_type.lower())
+            if not builder:
+                raise ValueError(f"Unsupported: {container_type}")
+            polyglot = builder(cover, payload)
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)) or '.', exist_ok=True)
         with open(output_path, 'wb') as f:
@@ -578,8 +612,525 @@ End Function
         atom = struct.pack('>I', len(p) + 8) + b'free' + p
         return c + atom
 
+    def _build_pe_polyglot(self, cover_data: bytes, payload_data: bytes, cover_format: str, arch: str = 'x86-64') -> bytes:
+        """
+        Build a REAL PE polyglot using Corkami-style overlay technique:
+        - PE at offset 0 with VALID import table (kernel32.dll → ExitProcess)
+        - Cover image appended after PE EOF (overlay)
+        - Windows PE loader ignores overlay data → PE executes normally
+        - Image viewers scan forward and find image signature in overlay
+        - Windows Defender scans the PE structure → detects embedded threats
 
-# ── Detector Engine ──────────────────────────────────────────
+        The PE is a valid PE32+ executable with:
+        - Proper MZ/PE/COFF/Optional headers
+        - Import table: kernel32.dll → ExitProcess
+        - Entry point: call ExitProcess(0)
+        """
+        # If payload is already a real PE, use it directly (overlay technique)
+        if payload_data[:2] == b'MZ' and self._validate_pe_structure(payload_data):
+            return payload_data + cover_data
+
+        # If payload is raw data, wrap it in a valid PE dropper + overlay
+        pe_stub = self._build_valid_pe_stub(payload_data, arch=arch)
+        return pe_stub + cover_data
+
+    def _validate_pe_structure(self, data: bytes) -> bool:
+        """Check if data is a structurally valid PE."""
+        if len(data) < 64:
+            return False
+        try:
+            e_lfanew = struct.unpack_from('<I', data, 60)[0]
+            if e_lfanew + 4 > len(data):
+                return False
+            if data[e_lfanew:e_lfanew+4] != b'PE\x00\x00':
+                return False
+            # Check Optional Header magic
+            opt_off = e_lfanew + 24
+            if opt_off + 2 > len(data):
+                return False
+            magic = struct.unpack_from('<H', data, opt_off)[0]
+            return magic in (0x10B, 0x20B)  # PE32 or PE32+
+        except Exception:
+            return False
+
+    def _build_valid_pe_stub(self, payload_data: bytes = b'', arch: str = 'x86-64') -> bytes:
+        """
+        Build a minimal valid PE32+ executable that Windows can load and execute.
+        Supports x86-64 and ARM64 (AArch64) architectures.
+
+        PE32+ Optional Header field offsets (from optional header start):
+          0: Magic(2)  2: LinkerVer(2)  4: SizeOfCode(4)
+          8: SizeOfInitData(4)  12: SizeOfUninitData(4)
+          16: EntryPoint(4)  20: BaseOfCode(4)
+          24: ImageBase(8)  32: SectionAlignment(4)  36: FileAlignment(4)
+          40: MajorOSVer(2)  42: MinorOSVer(2)  44: MajorImgVer(2)  46: MinorImgVer(2)
+          48: MajorSubVer(2)  50: MinorSubVer(2)  52: Win32VerVal(4)
+          56: SizeOfImage(4)  60: SizeOfHeaders(4)  64: CheckSum(4)
+          68: Subsystem(2)  70: DllCharacteristics(2)
+          72: SizeOfStackReserve(8)  80: SizeOfStackCommit(8)
+          88: SizeOfHeapReserve(8)  96: SizeOfHeapCommit(8)
+          104: LoaderFlags(4)  108: NumberOfRvaAndSizes(4)
+          112: Data Directories (16 × 8 = 128 bytes)
+        Total optional header = 240 bytes
+
+        .rdata import table layout:
+          0x2000: IDT[0] (20 bytes) — kernel32.dll
+          0x2014: IDT null (20 bytes)
+          0x2028: ILT[0] (8 bytes) → hint/name RVA
+          0x2030: IAT[0] (8 bytes) → hint/name RVA (overwritten by loader)
+          0x2038: Hint(2) + "ExitProcess\\0" (14 bytes)
+          0x2048: "kernel32.dll\\0" (13 bytes)
+        """
+        payload_aligned = ((len(payload_data) + 0x1FF) // 0x200) * 0x200 if payload_data else 0
+        num_sections = 3 if payload_data else 2
+        headers_size = 64 + 4 + 20 + 240 + (num_sections * 40)
+        headers_padded = ((headers_size + 0x1FF) // 0x200) * 0x200
+
+        text_file_off = headers_padded
+        text_rva = 0x1000
+        rdata_file_off = text_file_off + 0x200
+        rdata_rva = 0x2000
+        if payload_data:
+            data_file_off = rdata_file_off + 0x200
+            data_rva = 0x3000
+            size_of_image = 0x4000
+        else:
+            data_file_off = 0
+            data_rva = 0
+            size_of_image = 0x3000
+
+        total_size = rdata_file_off + 0x200 + payload_aligned
+        pe = bytearray(total_size)
+
+        # ═══ DOS Header at 0x0000 ═══
+        pe[0:2] = b'MZ'
+        pe[60:64] = struct.pack('<I', 64)
+
+        # ═══ PE Signature at 0x0040 ═══
+        pe[64:68] = b'PE\x00\x00'
+
+        # ═══ COFF Header at 0x0044 ═══
+        machine = 0xAA64 if arch == 'arm64' else 0x8664  # IMAGE_FILE_MACHINE_ARM64 or AMD64
+        pe[68:70] = struct.pack('<H', machine)
+        pe[70:72] = struct.pack('<H', num_sections)
+        pe[80:82] = struct.pack('<H', 0xF0)
+        pe[82:84] = struct.pack('<H', 0x22)
+
+        # ═══ Optional Header (PE32+) at 0x0058 ═══
+        o = 88  # opt header start = DOS(64) + PE(4) + COFF(20) = 88
+        pe[o:o+2] = struct.pack('<H', 0x20B)              # Magic: PE32+
+        pe[o+2] = 14                                       # MajorLinkerVersion
+        pe[o+4:o+8] = struct.pack('<I', 0x200)             # SizeOfCode
+        pe[o+8:o+12] = struct.pack('<I', 0x200)            # SizeOfInitializedData
+        pe[o+16:o+20] = struct.pack('<I', text_rva)        # AddressOfEntryPoint
+        pe[o+20:o+24] = struct.pack('<I', text_rva)        # BaseOfCode
+        pe[o+24:o+32] = struct.pack('<Q', 0x140000000)     # ImageBase (8 bytes)
+        pe[o+32:o+36] = struct.pack('<I', 0x1000)          # SectionAlignment
+        pe[o+36:o+40] = struct.pack('<I', 0x200)           # FileAlignment
+        pe[o+40:o+44] = struct.pack('<I', 6)               # MajorOperatingSystemVersion
+        pe[o+48:o+50] = struct.pack('<H', 6)               # MajorSubsystemVersion
+        pe[o+56:o+60] = struct.pack('<I', size_of_image)   # SizeOfImage
+        pe[o+60:o+64] = struct.pack('<I', headers_padded)  # SizeOfHeaders
+        pe[o+64:o+68] = struct.pack('<I', 0)               # CheckSum
+        pe[o+68:o+70] = struct.pack('<H', 3)               # Subsystem: CONSOLE
+        pe[o+70:o+72] = struct.pack('<H', 0x8100)          # DllCharacteristics: NX_COMPAT|TERMINAL_SERVER
+        pe[o+72:o+80] = struct.pack('<Q', 0x100000)        # SizeOfStackReserve
+        pe[o+80:o+88] = struct.pack('<Q', 0x1000)          # SizeOfStackCommit
+        pe[o+88:o+96] = struct.pack('<Q', 0x100000)        # SizeOfHeapReserve
+        pe[o+96:o+104] = struct.pack('<Q', 0x1000)         # SizeOfHeapCommit
+        pe[o+108:o+112] = struct.pack('<I', 16)            # NumberOfRvaAndSizes
+
+        # DataDirectory[1] = Import Directory (at opt+112 + 1*8 = opt+120)
+        pe[o+120:o+124] = struct.pack('<I', rdata_rva)     # Import RVA
+        pe[o+124:o+128] = struct.pack('<I', 0x28)          # Import Size (40 bytes)
+
+        # ═══ Section Headers at 0x00E8 ═══
+        sec_off = 232  # 64+4+20+240 = 328... wait
+        # DOS(64) + PE(4) + COFF(20) + Opt(240) = 328
+        sec_off = 328
+
+        # .text section
+        pe[sec_off:sec_off+6] = b'.text\x00'
+        pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x100)        # VirtualSize
+        pe[sec_off+12:sec_off+16] = struct.pack('<I', text_rva)    # VirtualAddress
+        pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x200)       # SizeOfRawData
+        pe[sec_off+20:sec_off+24] = struct.pack('<I', text_file_off) # PointerToRawData
+        pe[sec_off+36:sec_off+40] = struct.pack('<I', 0x60000020)  # CODE|EXEC|READ
+
+        # .rdata section
+        sec_off += 40
+        pe[sec_off:sec_off+6] = b'.rdata\x00'
+        pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x200)        # VirtualSize
+        pe[sec_off+12:sec_off+16] = struct.pack('<I', rdata_rva)   # VirtualAddress
+        pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x200)       # SizeOfRawData
+        pe[sec_off+20:sec_off+24] = struct.pack('<I', rdata_file_off) # PointerToRawData
+        pe[sec_off+36:sec_off+40] = struct.pack('<I', 0x40000040)  # INIT|READ
+
+        if payload_data:
+            # .data section
+            sec_off += 40
+            pe[sec_off:sec_off+6] = b'.data\x00'
+            pe[sec_off+8:sec_off+12] = struct.pack('<I', len(payload_data))
+            pe[sec_off+12:sec_off+16] = struct.pack('<I', data_rva)
+            pe[sec_off+16:sec_off+20] = struct.pack('<I', payload_aligned)
+            pe[sec_off+20:sec_off+24] = struct.pack('<I', data_file_off)
+            pe[sec_off+36:sec_off+40] = struct.pack('<I', 0xC0000040)  # INIT|READ|WRITE
+
+        # ═══ .text section code at text_file_off ═══
+        code_off = text_file_off
+        if arch == 'arm64':
+            # ARM64 Windows: ExitProcess(0) via syscall
+            #   mov x0, #0               ; 00 00 80 52
+            #   mov x8, #0x104           ; A8 08 80 D2 (NtTerminateProcess)
+            #   svc #0                   ; 01 00 00 D4
+            pe[code_off:code_off+4] = b'\x00\x00\x80\x52'     # mov w0, #0
+            pe[code_off+4:code_off+8] = b'\xA8\x08\x80\xD2'  # mov x8, #0x104
+            pe[code_off+8:code_off+12] = b'\x01\x00\x00\xD4' # svc #0
+        else:
+            # x86-64: call ExitProcess(0) via IAT
+            #   sub rsp, 0x28          ; 48 83 EC 28
+            #   xor ecx, ecx           ; 33 C9
+            #   call [rip+0x1024]      ; FF 15 24 10 00 00  → reads IAT at 0x2030
+            #   nop                    ; 90
+            #   int3                   ; CC
+            pe[code_off:code_off+4] = b'\x48\x83\xEC\x28'       # sub rsp, 0x28
+            pe[code_off+4:code_off+6] = b'\x33\xC9'             # xor ecx, ecx
+            pe[code_off+6:code_off+8] = b'\xFF\x15'             # call [rip+disp32]
+            # RIP after call = text_rva + 6 + 6 = 0x100C
+            # Target = IAT RVA = rdata_rva + 0x30 = 0x2030
+            # disp = 0x2030 - 0x100C = 0x1024
+            disp = (rdata_rva + 0x30) - (text_rva + 12)
+            pe[code_off+8:code_off+12] = struct.pack('<I', disp)
+            pe[code_off+12] = 0x90                               # nop
+            pe[code_off+13] = 0xCC                               # int3
+
+        # ═══ .rdata section at rdata_file_off ═══
+        rdata = bytearray(0x200)
+
+        # IDT[0] at .rdata[0:20] (RVA rdata_rva+0x00)
+        struct.pack_into('<I', rdata, 0, rdata_rva + 0x28)    # OriginalFirstThunk → ILT
+        struct.pack_into('<I', rdata, 12, rdata_rva + 0x48)   # Name → "kernel32.dll"
+        struct.pack_into('<I', rdata, 16, rdata_rva + 0x30)   # FirstThunk → IAT
+        # IDT null terminator at .rdata[20:40] — already zeros
+
+        # ILT[0] at .rdata[0x28:0x30] (RVA rdata_rva+0x28)
+        struct.pack_into('<Q', rdata, 0x28, rdata_rva + 0x38) # → hint/name
+
+        # IAT[0] at .rdata[0x30:0x38] (RVA rdata_rva+0x30)
+        struct.pack_into('<Q', rdata, 0x30, rdata_rva + 0x38) # → hint/name (overwritten by loader)
+
+        # Hint/Name at .rdata[0x38] (RVA rdata_rva+0x38)
+        struct.pack_into('<H', rdata, 0x38, 0)               # Hint = 0
+        rdata[0x3A:0x46] = b'ExitProcess\x00'                 # Function name
+
+        # DLL name at .rdata[0x48] (RVA rdata_rva+0x48)
+        rdata[0x48:0x55] = b'kernel32.dll\x00'
+
+        pe[rdata_file_off:rdata_file_off+0x200] = rdata
+
+        # ═══ Payload data in .data section ═══
+        if payload_data:
+            pe[data_file_off:data_file_off+len(payload_data)] = payload_data
+
+        return bytes(pe)
+
+    def _build_elf_polyglot(self, cover_data: bytes, payload_data: bytes, cover_format: str, arch: str = 'x86-64') -> bytes:
+        """
+        Build an ELF64 polyglot using the overlay technique:
+        - If payload is a real ELF → use directly (overlay)
+        - If payload is raw data → wrap in minimal ELF64 (x86-64 or AArch64 Linux, exit(0))
+        - Cover image appended after ELF EOF (overlay)
+        """
+        if payload_data[:4] == b'\x7fELF':
+            return payload_data + cover_data
+        elf = self._build_valid_elf64_stub(payload_data, arch=arch)
+        return elf + cover_data
+
+    def _build_valid_elf64_stub(self, payload_data: bytes = b'', arch: str = 'x86-64') -> bytes:
+        """
+        Build a minimal valid ELF64 executable (x86-64 or AArch64 Linux).
+        Entry point calls exit(0) via syscall.
+        Payload stored in .data segment.
+        """
+        import struct as s
+        if arch == 'arm64':
+            # AArch64 Linux: exit(0) syscall
+            #   mov x8, #93       ; D2000BA8 (syscall number for exit)
+            #   mov x0, #0        ; D2800000
+            #   svc #0            ; D4000001
+            code = struct.pack('<III',
+                0xD2000BA8,  # mov x8, #93
+                0xD2800000,  # mov x0, #0
+                0xD4000001,  # svc #0
+            )
+            machine = 0xB7  # EM_AARCH64
+        else:
+            code = bytes([0xb8, 0x3c, 0x00, 0x00, 0x00,  # mov eax, 60 (exit)
+                          0x31, 0xff,                        # xor edi, edi
+                          0x0f, 0x05])                       # syscall
+            machine = 62  # EM_X86_64
+
+        payload_aligned = ((len(payload_data) + 0xFFF) // 0x1000) * 0x1000 if payload_data else 0
+        code_size = len(code)
+        num_phdrs = 2 if payload_data else 1
+
+        # ELF64 header (64 bytes) + program headers (56 bytes each)
+        phdr_off = 64
+        hdrs_size = 64 + num_phdrs * 56
+        # Code starts right after headers
+        code_file_off = hdrs_size
+        code_vaddr = 0x400000 + code_file_off
+        # Payload after code, page-aligned in memory
+        if payload_data:
+            payload_file_off = code_file_off + 0x100
+            payload_vaddr = 0x410000
+        else:
+            payload_file_off = 0
+            payload_vaddr = 0
+
+        total_size = code_file_off + 0x100 + (len(payload_data) if payload_data else 0)
+        elf = bytearray(total_size)
+
+        # ELF64 Header
+        elf[0:4] = b'\x7fELF'
+        elf[4] = 2        # EI_CLASS: ELFCLASS64
+        elf[5] = 1        # EI_DATA: ELFDATA2LSB
+        elf[6] = 1        # EI_VERSION: EV_CURRENT
+        elf[7] = 0        # EI_OSABI: ELFOSABI_SYSV
+        s.pack_into('<H', elf, 16, 2)       # e_type: ET_EXEC
+        s.pack_into('<H', elf, 18, machine)  # e_machine: EM_X86_64 or EM_AARCH64
+        s.pack_into('<I', elf, 20, 1)       # e_version
+        s.pack_into('<Q', elf, 24, code_vaddr)  # e_entry
+        s.pack_into('<Q', elf, 32, phdr_off)    # e_phoff
+        s.pack_into('<H', elf, 52, 64)      # e_ehsize
+        s.pack_into('<H', elf, 54, 56)      # e_phentsize
+        s.pack_into('<H', elf, 56, num_phdrs)   # e_phnum
+
+        # Program header 1: PT_LOAD (code)
+        p = phdr_off
+        s.pack_into('<I', elf, p, 1)        # p_type: PT_LOAD
+        s.pack_into('<I', elf, p+4, 5)      # p_flags: PF_R|PF_X
+        s.pack_into('<Q', elf, p+8, 0)      # p_offset
+        s.pack_into('<Q', elf, p+16, 0x400000)  # p_vaddr
+        s.pack_into('<Q', elf, p+24, 0x400000)  # p_paddr
+        s.pack_into('<Q', elf, p+32, total_size)  # p_filesz
+        s.pack_into('<Q', elf, p+40, total_size + payload_aligned)  # p_memsz
+        s.pack_into('<Q', elf, p+48, 0x1000)    # p_align
+
+        # Program header 2: PT_LOAD (data) — for payload
+        if payload_data:
+            p += 56
+            s.pack_into('<I', elf, p, 1)        # p_type: PT_LOAD
+            s.pack_into('<I', elf, p+4, 6)      # p_flags: PF_R|PF_W
+            s.pack_into('<Q', elf, p+8, payload_file_off)  # p_offset
+            s.pack_into('<Q', elf, p+16, payload_vaddr)    # p_vaddr
+            s.pack_into('<Q', elf, p+24, payload_vaddr)    # p_paddr
+            s.pack_into('<Q', elf, p+32, len(payload_data))  # p_filesz
+            s.pack_into('<Q', elf, p+40, len(payload_data))  # p_memsz
+            s.pack_into('<Q', elf, p+48, 0x1000)    # p_align
+
+        # Code at code_file_off
+        elf[code_file_off:code_file_off+code_size] = code
+
+        # Payload
+        if payload_data:
+            elf[payload_file_off:payload_file_off+len(payload_data)] = payload_data
+
+        return bytes(elf)
+
+    def _build_valid_elf32_arm_stub(self, payload_data: bytes = b'') -> bytes:
+        """Build a VALID ELF32 executable (Linux ARM32) that passes hex editor inspection.
+
+        Structure:
+        - ELF Header (52 bytes) for 32-bit ARM
+        - Program Header (32 bytes) with PT_LOAD segment
+        - Code segment: real ARM32 exit(0) code (svc #0)
+        """
+        code = struct.pack('<III',
+            0xE3A07001,  # mov r7, #1 (sys_exit)
+            0xE3A00000,  # mov r0, #0 (exit code)
+            0xEF000000,  # swi #0 (syscall)
+        )
+        entry_addr = 0x08048000
+        code_off = 0x1000  # offset in file
+        code_addr = entry_addr + code_off
+        payload_off = 0x2000
+        payload_file_off = 0x2000
+        total_size = 0x3000 + len(payload_data)
+
+        elf = bytearray(total_size)
+
+        # ELF32 Header (52 bytes)
+        e_ident = b'\x7fELF'   # e_ident[EI_MAG0..3]
+        e_ident += b'\x01'      # EI_CLASS = ELFCLASS32
+        e_ident += b'\x01'      # EI_DATA = ELFDATA2LSB (little-endian)
+        e_ident += b'\x01'      # EI_VERSION = EV_CURRENT
+        e_ident += b'\x00'      # EI_OSABI = ELFOSABI_NONE
+        e_ident += b'\x00' * 8  # EI_ABIVERSION + padding
+
+        e_ident += struct.pack('<HHIIIIIHHHHHH',
+            2,          # e_type = ET_EXEC (executable)
+            40,         # e_machine = EM_ARM
+            1,          # e_version
+            entry_addr, # e_entry (entry point virtual address)
+            52,         # e_phoff (program header offset)
+            0,          # e_shoff (section header offset, 0 = none)
+            0x04000000, # e_flags (ARM-specific flags)
+            52,         # e_ehsize (ELF header size)
+            32,         # e_phentsize (program header entry size)
+            1,          # e_phnum (number of program headers)
+            40,         # e_shentsize (section header entry size)
+            0,          # e_shnum (no section headers)
+            0,          # e_shstrndx (no section name string table)
+        )
+
+        elf[:len(e_ident)] = e_ident
+
+        # Program Header (32 bytes for ELF32)
+        ph = struct.pack('<IIIIIIII',
+            1,          # p_type = PT_LOAD
+            code_off,   # p_offset
+            code_addr,  # p_vaddr
+            code_addr,  # p_paddr
+            0x2000 + len(payload_data),  # p_filesz
+            0x2000 + len(payload_data),  # p_memsz
+            5,          # p_flags = PF_R | PF_X
+            0x1000,     # p_align
+        )
+
+        elf[52:52+32] = ph  # after ELF header
+
+        # Code at code_off
+        elf[code_off:code_off+len(code)] = code
+
+        # Payload at payload_file_off
+        if payload_data:
+            elf[payload_file_off:payload_file_off+len(payload_data)] = payload_data
+
+        return bytes(elf)
+
+    def _build_macho_polyglot(self, cover_data: bytes, payload_data: bytes, cover_format: str, arch: str = 'x86-64') -> bytes:
+        """
+        Build a Mach-O 64-bit polyglot using the overlay technique:
+        - If payload is a real Mach-O → use directly (overlay)
+        - If payload is raw data → wrap in minimal Mach-O (x86-64 or arm64 macOS, exit(0))
+        - Cover image appended after Mach-O EOF (overlay)
+        """
+        macho_magic = (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf',
+                       b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe')
+        if payload_data[:4] in macho_magic:
+            return payload_data + cover_data
+        macho = self._build_valid_macho64_stub(payload_data, arch=arch)
+        return macho + cover_data
+
+    def _build_valid_macho64_stub(self, payload_data: bytes = b'', arch: str = 'x86-64') -> bytes:
+        """
+        Build a minimal valid Mach-O 64-bit executable (x86-64 or arm64 macOS).
+        Entry point calls exit(0) via syscall.
+        """
+        import struct as s
+        if arch == 'arm64':
+            code = struct.pack('<IIII',
+                0xD2800030,  # movz x16, #1
+                0xF2A04010,  # movk x16, #0x200, lsl #16
+                0xD2800000,  # mov x0, #0
+                0xD4001001,  # svc #0x80
+            )
+            cpu_type = 0x0100000C  # CPU_TYPE_ARM64
+        else:  # x86-64
+            code = bytes([0xb8, 0x01, 0x00, 0x00, 0x02,  # mov eax, 0x2000001
+                          0x31, 0xff,                        # xor edi, edi
+                          0x0f, 0x05])                       # syscall
+            cpu_type = 0x01000007  # CPU_TYPE_X86_64
+
+        # Mach-O layout:
+        # Header (32 bytes)
+        # LC_SEGMENT_64 __TEXT (72 bytes + section headers)
+        # LC_MAIN (24 bytes)
+        # Code
+        # LC_SEGMENT_64 __DATA (72 bytes) — for payload
+
+        # Load commands
+        text_seg_size = 72 + 0  # no section headers for simplicity
+        main_size = 24
+        data_seg_size = 72 if payload_data else 0
+        num_cmds = 2 if payload_data else 2  # __TEXT + LC_MAIN (+ __DATA if payload)
+        if payload_data:
+            num_cmds = 3
+
+        header_size = 32
+        lc_offset = header_size
+        text_seg_off = lc_offset
+        main_off = text_seg_off + text_seg_size
+        data_seg_off = main_off + main_size if payload_data else 0
+        code_off = (data_seg_off + data_seg_size) if payload_data else (main_off + main_size)
+        code_vaddr = 0x100000000 + code_off  # Typical Mach-O base
+
+        if payload_data:
+            payload_off = code_off + 0x100
+            payload_vaddr = 0x100010000
+            total_cmds_size = text_seg_size + main_size + data_seg_size
+            total_size = code_off + 0x100 + len(payload_data)
+        else:
+            payload_off = 0
+            payload_vaddr = 0
+            total_cmds_size = text_seg_size + main_size
+            total_size = code_off + 0x100
+
+        macho = bytearray(total_size)
+
+        # Mach-O Header (little-endian: CF FA ED FE)
+        macho[0:4] = b'\xcf\xfa\xed\xfe'  # MH_MAGIC_64 (LE)
+        s.pack_into('<I', macho, 4, cpu_type)      # cputype: CPU_TYPE_X86_64 or CPU_TYPE_ARM64
+        s.pack_into('<I', macho, 8, 3)             # cpusubtype: CPU_SUBTYPE_ALL
+        s.pack_into('<I', macho, 12, 2)            # filetype: MH_EXECUTE
+        s.pack_into('<I', macho, 16, num_cmds)     # ncmds
+        s.pack_into('<I', macho, 20, total_cmds_size)  # sizeofcmds
+        s.pack_into('<I', macho, 24, 0)            # flags
+        s.pack_into('<I', macho, 28, 0)            # reserved
+
+        # LC_SEGMENT_64 __TEXT
+        off = text_seg_off
+        s.pack_into('<I', macho, off, 0x19)        # cmd: LC_SEGMENT_64
+        s.pack_into('<I', macho, off+4, text_seg_size)  # cmdsize
+        macho[off+8:off+14] = b'__TEXT\x00'        # segname
+        s.pack_into('<Q', macho, off+24, 0x100000000)   # vmaddr
+        s.pack_into('<Q', macho, off+32, total_size)     # vmsize
+        s.pack_into('<Q', macho, off+40, 0)              # fileoff
+        s.pack_into('<Q', macho, off+48, total_size)     # filesize
+        s.pack_into('<I', macho, off+56, 7)              # maxprot: PROT_READ|PROT_WRITE|PROT_EXEC
+        s.pack_into('<I', macho, off+60, 5)              # initprot: PROT_READ|PROT_EXEC
+        s.pack_into('<I', macho, off+64, 0)              # nsects
+
+        # LC_MAIN (entry point)
+        off = main_off
+        s.pack_into('<I', macho, off, 0x80000028)  # cmd: LC_MAIN
+        s.pack_into('<I', macho, off+4, main_size) # cmdsize
+        s.pack_into('<Q', macho, off+8, code_off)  # entryoff (file offset of entry)
+        s.pack_into('<I', macho, off+16, 0)        # stacksize
+
+        # LC_SEGMENT_64 __DATA (for payload)
+        if payload_data:
+            off = data_seg_off
+            s.pack_into('<I', macho, off, 0x19)        # cmd: LC_SEGMENT_64
+            s.pack_into('<I', macho, off+4, data_seg_size)  # cmdsize
+            macho[off+8:off+14] = b'__DATA\x00'        # segname
+            s.pack_into('<Q', macho, off+24, payload_vaddr)  # vmaddr
+            s.pack_into('<Q', macho, off+32, len(payload_data))  # vmsize
+            s.pack_into('<Q', macho, off+40, payload_off)        # fileoff
+            s.pack_into('<Q', macho, off+48, len(payload_data))  # filesize
+            s.pack_into('<I', macho, off+56, 7)        # maxprot
+            s.pack_into('<I', macho, off+60, 3)        # initprot: PROT_READ|PROT_WRITE
+            s.pack_into('<I', macho, off+64, 0)        # nsects
+
+        # Code
+        macho[code_off:code_off+len(code)] = code
+
+        # Payload
+        if payload_data:
+            macho[payload_off:payload_off+len(payload_data)] = payload_data
+
+        return bytes(macho)
 
 class PolyglotDetector:
     SIGS = {
@@ -635,15 +1186,83 @@ class PolyglotDetector:
             findings.append({'type':'EXTENSION_MISMATCH',
                 'detail':f'Ext={exp}, Content=UNKNOWN','severity':'high','offset':0})
 
-        for name, sig in self.SIGS.items():
+        # Extensions that are EXPECTED to contain script/PE/ELF patterns — skip sig scanning
+        SAFE_EXT = {'.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.htm', '.xhtml',
+                    '.php', '.asp', '.aspx', '.jsp', '.vue', '.svelte', '.rb', '.pl',
+                    '.sh', '.bash', '.zsh', '.ps1', '.bat', '.cmd', '.vbs', '.lua',
+                    '.md', '.txt', '.rst', '.csv', '.json', '.xml', '.yaml', '.yml',
+                    '.toml', '.ini', '.cfg', '.conf', '.log', '.sql', '.r', '.R',
+                    '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.rs', '.swift',
+                    '.kt', '.scala', '.ex', '.exs', '.erl', '.hs', '.ml', '.clj'}
+
+        # Script patterns — only check in TRAILING data, not entire file
+        SCRIPT_SIGS = {
+            'SCRIPT': b'<script', 'HTA': b'<hta:', 'HTA2': b'<HTA:',
+            'VBS': b'CreateObject', 'JSCRIPT': b'function(',
+            'CMD': b'cmd.exe', 'PS1': b'powershell', 'WSF': b'<job',
+            'PYTHON': b'#!/usr/bin/env python', 'APPLESCRIPT': b'osascript',
+        }
+        # Executable patterns — check anywhere but validate headers
+        EXE_SIGS = {
+            'PE/EXE': b'MZ', 'ELF': b'\x7fELF', 'LNK': b'\x4c\x00\x00\x00',
+            'CLASS': b'\xca\xfe\xba\xbe', 'MACHO': b'\xfe\xed\xfa',
+            'DOTNET': b'\x00\x00\x00\x00\x4d\x5a',
+        }
+        # Non-exe patterns safe to check anywhere
+        OTHER_SIGS = {
+            'PDF': b'%PDF', 'ZIP': b'PK', 'RAR': b'Rar!',
+            '7Z': b'\x37\x7a\xbc\xaf', 'GZIP': b'\x1f\x8b',
+            'BAT': b'@echo', 'SH': b'#!/bin/',
+        }
+
+        # Get trailing data region (after end marker)
+        trailing_start = len(data)  # default: no trailing region
+        markers = {'JPEG':(b'\xff\xd9',2,64),'PNG':(b'IEND',8,64),
+                   'GIF':(b'\x3b',1,64),'PDF':(b'%%EOF',5,0)}
+        if ct in markers:
+            m, extra, _ = markers[ct]
+            pos = data.rfind(m)
+            if pos != -1:
+                trailing_start = pos + extra
+        elif ct == 'ZIP':
+            eocd = data.rfind(b'PK\x05\x06')
+            if eocd != -1:
+                comment_len = 0
+                if eocd + 22 <= len(data):
+                    comment_len = struct.unpack('<H', data[eocd+20:eocd+22])[0]
+                trailing_start = eocd + 22 + comment_len
+
+        # 1. Check EXE sigs anywhere (with validation)
+        for name, sig in EXE_SIGS.items():
             off = data.find(sig, 64)
-            if off != -1:
-                sev = 'critical' if name in ('PE/EXE','ELF','LNK',
-                        'SCRIPT','HTA','HTA2','VBS','JSCRIPT','CMD',
-                        'SH','PS1','BAT','PYTHON','APPLESCRIPT','WSF') else \
-                      'warning'
+            if off != -1 and ext not in SAFE_EXT:
+                is_valid = False
+                if sig == b'MZ':
+                    is_valid = self._validate_pe(data, off)
+                elif sig == b'\x7fELF':
+                    is_valid = self._validate_elf(data, off)
+                else:
+                    is_valid = True
+                if is_valid:
+                    findings.append({'type':'HIDDEN_SIG','detail':f'{name} @ 0x{off:X}',
+                        'severity':'critical','offset':off})
+
+        # 2. Check script sigs ONLY in trailing data
+        if trailing_start < len(data) and ext not in SAFE_EXT:
+            trailing = data[trailing_start:]
+            for name, sig in SCRIPT_SIGS.items():
+                off = trailing.find(sig)
+                if off != -1:
+                    sev = 'critical' if name in ('SCRIPT','HTA','HTA2','VBS','JSCRIPT','CMD','PS1') else 'warning'
+                    findings.append({'type':'HIDDEN_SIG','detail':f'{name} @ 0x{trailing_start+off:X}',
+                        'severity':sev,'offset':trailing_start+off})
+
+        # 3. Check other sigs anywhere (format confusion)
+        for name, sig in OTHER_SIGS.items():
+            off = data.find(sig, 64)
+            if off != -1 and ext not in SAFE_EXT:
                 findings.append({'type':'HIDDEN_SIG','detail':f'{name} @ 0x{off:X}',
-                    'severity':sev,'offset':off})
+                    'severity':'warning','offset':off})
 
         # Per-format: (end_marker, extra_bytes, min_search_offset)
         # PDF %%EOF can appear very early in small files, so use offset 0
@@ -689,6 +1308,54 @@ class PolyglotDetector:
                         'detail':f'{t:,} bytes after MP4 moov atom — hidden payload',
                         'severity':'critical','offset':mp4_end})
 
+        # PE/ELF/Mach-O overlay detection: executable at start, image in overlay
+        # This is the classic polyglot technique: OS ignores overlay, image viewers find image
+        if ct in ('PE', 'ELF'):
+            IMAGE_SIGS = {
+                'JPEG': b'\xff\xd8\xff',
+                'PNG': b'\x89PNG\r\n\x1a\n',
+                'GIF87a': b'GIF87a',
+                'GIF89a': b'GIF89a',
+            }
+            for img_name, img_sig in IMAGE_SIGS.items():
+                # Search for image signature after the first 1KB (past headers)
+                img_off = data.find(img_sig, 1024)
+                if img_off != -1:
+                    findings.append({'type':'OVERLAY_POLYGLOT',
+                        'detail':f'{ct}+{img_name} overlay: executable at 0x0, {img_name} image @ 0x{img_off:X} ({len(data)-img_off:,} bytes)',
+                        'severity':'critical','offset':img_off})
+
+        # Mach-O overlay detection
+        if data[:4] in (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf',
+                        b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe'):
+            IMAGE_SIGS = {
+                'JPEG': b'\xff\xd8\xff',
+                'PNG': b'\x89PNG\r\n\x1a\n',
+                'GIF87a': b'GIF87a',
+                'GIF89a': b'GIF89a',
+            }
+            for img_name, img_sig in IMAGE_SIGS.items():
+                img_off = data.find(img_sig, 1024)
+                if img_off != -1:
+                    findings.append({'type':'OVERLAY_POLYGLOT',
+                        'detail':f'Mach-O+{img_name} overlay: executable at 0x0, {img_name} image @ 0x{img_off:X} ({len(data)-img_off:,} bytes)',
+                        'severity':'critical','offset':img_off})
+
+        # Image overlay detection: image at start, executable in trailing data
+        if ct in ('JPEG', 'PNG', 'GIF') and trailing_start < len(data):
+            trailing = data[trailing_start:]
+            EXE_OVERLAY_SIGS = {
+                'PE/EXE': b'MZ',
+                'ELF': b'\x7fELF',
+                'Mach-O': b'\xfe\xed\xfa',
+            }
+            for exe_name, exe_sig in EXE_OVERLAY_SIGS.items():
+                exe_off = trailing.find(exe_sig)
+                if exe_off != -1:
+                    findings.append({'type':'OVERLAY_POLYGLOT',
+                        'detail':f'{ct}+{exe_name} overlay: image at 0x0, {exe_name} @ 0x{trailing_start+exe_off:X} ({len(trailing)-exe_off:,} bytes)',
+                        'severity':'critical','offset':trailing_start+exe_off})
+
         ss = max(len(data)//8, 1)
         for i in range(8):
             s = data[i*ss:(i+1)*ss]
@@ -699,17 +1366,42 @@ class PolyglotDetector:
                     'detail':f'Section {i+1}/8: {e:.2f}','severity':'info','offset':i*ss})
 
         if data[:4]==b'%PDF' and data.find(b'MZ',100)!=-1:
-            findings.append({'type':'MIME_CONFUSION',
-                'detail':'PDF+PE — MIME confusion','severity':'critical','offset':data.find(b'MZ',100)})
+            mz_off = data.find(b'MZ',100)
+            if self._validate_pe(data, mz_off):
+                findings.append({'type':'MIME_CONFUSION',
+                    'detail':'PDF+PE — MIME confusion','severity':'critical','offset':mz_off})
         if data[:2]==b'\xff\xd8' and data.find(b'PK',100)!=-1:
-            findings.append({'type':'MIME_CONFUSION',
-                'detail':'JPEG+ZIP — MIME confusion','severity':'critical','offset':data.find(b'PK',100)})
+            pk_off = data.find(b'PK',100)
+            # Validate PK is a real ZIP local file header (PK\x03\x04) or EOCD (PK\x05\x06)
+            if pk_off + 4 <= len(data) and data[pk_off:pk_off+4] in (b'PK\x03\x04', b'PK\x05\x06', b'PK\x01\x02'):
+                findings.append({'type':'MIME_CONFUSION',
+                    'detail':'JPEG+ZIP — MIME confusion','severity':'critical','offset':pk_off})
         # HTML/Script in non-HTML files = active payload
         if ct in ('HTML',) and ext not in ('.html','.htm','.php','.xhtml','.svg'):
             findings.append({'type':'MIME_CONFUSION',
                 'detail':f'HTML content in {ext} file — executable payload','severity':'critical','offset':0})
 
         return findings
+
+    def _validate_pe(self, data: bytes, pos: int) -> bool:
+        """Validate that MZ at pos is a real PE header."""
+        try:
+            if pos + 64 > len(data): return False
+            e_lfanew = struct.unpack_from('<I', data, pos + 60)[0]
+            pe_pos = pos + e_lfanew
+            if pe_pos + 4 > len(data): return False
+            return data[pe_pos:pe_pos+4] == b'PE\x00\x00'
+        except: return False
+
+    def _validate_elf(self, data: bytes, pos: int) -> bool:
+        """Validate that ELF at pos has valid header."""
+        try:
+            if pos + 20 > len(data): return False
+            if data[pos+4] not in (1, 2): return False
+            if data[pos+5] not in (1, 2): return False
+            elf_type = struct.unpack_from('<H' if data[pos+5]==1 else '>H', data, pos+16)[0]
+            return elf_type in (1, 2, 3, 4)
+        except: return False
 
     def _find_mp4_end(self, data: bytes) -> int:
         """Find the end of valid MP4 atoms. Returns offset of trailing data."""
@@ -1054,6 +1746,363 @@ class PolyglotTUI:
         console.print(BANNER_V3)
         console.print(f"  {DISCLAIMER_TUI}\n")
 
+    def _safe_menu_call(self, menu_func):
+        """Call a menu function in a loop — reuse without going back to home."""
+        while True:
+            try:
+                menu_func()
+            except KeyboardInterrupt:
+                console.print("\n[dim]Interrupted[/dim]")
+            except Exception as e:
+                console.print(f"[red]✗ Error: {e}[/red]")
+
+            # After menu returns, let user run again or go back
+            again = self.safe_input(
+                "[dim]Press [green]Enter[/green] to run again, or [red]q[/red] to go back[/dim]",
+                default=""
+            )
+            if again is not None and again.lower() in ("q", "quit", "back", "0"):
+                return
+
+    # ── Comprehensive Report ──────────────────────────────────────
+
+    def menu_report(self):
+        """Generate a comprehensive security report using multiple engines."""
+        console.print()
+        console.print(Panel("[bold white]📊 COMPREHENSIVE SECURITY REPORT[/bold white]", border_style="white"))
+        console.print("  Runs all major analysis engines on a target and generates")
+        console.print("  a single unified report file.\n")
+
+        target = self.safe_input("[bold cyan]Target file or directory[/bold cyan]")
+        if target is None: return
+        if not os.path.exists(target):
+            console.print(f"[red]✗ Not found: {target}[/red]")
+            return
+
+        # Collect files
+        if os.path.isfile(target):
+            files = [target]
+        else:
+            exts = {'.jpg','.jpeg','.png','.gif','.bmp','.pdf','.doc','.docx',
+                    '.zip','.exe','.dll','.bat','.cmd','.ps1','.vbs','.js','.mp4',
+                    '.sh','.bash','.py','.rb','.pl','.applescript','.scpt',
+                    '.xlsx','.xls','.pptx','.ppt','.rtf','.html','.hta','.wsf',
+                    '.7z','.rar','.iso','.elf','.so','.dylib','.macho'}
+            files = []
+            for root, dirs, fnames in os.walk(target):
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
+                for f in fnames:
+                    if os.path.splitext(f)[1].lower() in exts:
+                        files.append(os.path.join(root, f))
+
+        if not files:
+            console.print("[yellow]No scannable files found.[/yellow]")
+            return
+
+        # Choose which sections to run
+        console.print("\n[bold]Sections to include:[/bold]")
+        console.print("  1 │ 🔍  File Detector (rule-based + ML)")
+        console.print("  2 │ 🛡  File Sanitizer")
+        console.print("  3 │ 🔬  Deep Analysis (format, stego, PE, ELF, office, archive)")
+        console.print("  4 │ 🌐  Network IOCs (IPs, domains, URLs)")
+        console.print("  5 │ 🔵  Blue Side Indicators")
+        console.print("  6 │ 🔒  Quarantine Threats")
+        console.print("  [green]all[/green] │ Run everything (default)")
+
+        section_choice = self.safe_input(
+            "\n[bold]Select sections[/bold] (comma-separated, or 'all')",
+            default="all"
+        )
+        if section_choice is None: return
+
+        run_all = section_choice.strip().lower() == "all"
+        sections = set() if run_all else {s.strip() for s in section_choice.split(",")}
+
+        def want(s):
+            return run_all or s in sections
+
+        # Report output
+        report_dir = os.path.expanduser("~/.polyglot/reports")
+        os.makedirs(report_dir, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        target_name = os.path.basename(os.path.abspath(target))
+        report_path = os.path.join(report_dir, f"report_{target_name}_{ts}.txt")
+        report_lines = []
+
+        def rpt(line=""):
+            report_lines.append(line)
+
+        rpt("=" * 70)
+        rpt("  POLYGLOT SHIELD v3.0 — COMPREHENSIVE SECURITY REPORT")
+        rpt("=" * 70)
+        rpt(f"  Generated : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        rpt(f"  Target    : {os.path.abspath(target)}")
+        rpt(f"  Files     : {len(files)}")
+        rpt(f"  Sections  : {'ALL' if run_all else ', '.join(sorted(sections))}")
+        rpt("=" * 70)
+        rpt()
+
+        total_threats = 0
+        total_warnings = 0
+        total_clean = 0
+        all_findings = []  # (filepath, findings_list)
+        ioc_ips = set()
+        ioc_domains = set()
+        ioc_urls = set()
+        sanitize_count = 0
+        quarantine_count = 0
+
+        # Load ML model if available
+        ml_model = None
+        try:
+            from engines.model import PolyglotModel
+            from engines.features import extract_features_from_file
+            from pathlib import Path
+            mpath = "models/polyglot_shield.cbm"
+            if Path(mpath).exists():
+                ml_model = PolyglotModel({'task_type': 'CPU'})
+                ml_model.load(mpath)
+        except Exception:
+            pass
+
+        console.print(f"\n[dim]Analyzing {len(files)} files...[/dim]\n")
+
+        with Progress(SpinnerColumn(), TextColumn("[bold]{task.description}"),
+                     BarColumn(), TaskProgressColumn(), console=console) as progress:
+            task = progress.add_task("Generating report...", total=len(files))
+
+            for fpath in files:
+                fname = os.path.basename(fpath)
+
+                # ── Section 1: File Detector ──
+                if want("1"):
+                    try:
+                        findings = self.detector.scan_file(fpath)
+                        self.stats['scanned'] += 1
+
+                        ml_str = ""
+                        if ml_model and ml_model.is_loaded:
+                            try:
+                                feats = extract_features_from_file(fpath)
+                                pred = ml_model.predict_single(feats)
+                                ml_str = f"  ML: {pred['label']} {pred['risk_score']:.1f}% ({pred['risk_level']})"
+                            except Exception:
+                                pass
+
+                        if findings:
+                            crit = [f for f in findings if f['severity'] in ('critical','high')]
+                            if crit:
+                                total_threats += len(crit)
+                                all_findings.append((fpath, findings))
+                                rpt(f"  [!] {fname}")
+                                for f in findings:
+                                    sev = f['severity']
+                                    off = f" @ 0x{f['offset']:X}" if f.get('offset') else ""
+                                    rpt(f"      [{sev.upper()}] {f['type']}: {f['detail']}{off}")
+                                if ml_str:
+                                    rpt(f"      {ml_str}")
+                            else:
+                                total_warnings += 1
+                                rpt(f"  [~] {fname} — minor warnings")
+                        else:
+                            total_clean += 1
+                            rpt(f"  [+] {fname} — clean")
+                            if ml_str:
+                                rpt(f"      {ml_str}")
+                    except Exception as e:
+                        rpt(f"  [!] {fname} — scan error: {e}")
+
+                # ── Section 3: Deep Analysis (simplified inline) ──
+                if want("3"):
+                    try:
+                        try:
+                            from engines.media_analysis import MediaAnalyzer
+                            ma = MediaAnalyzer()
+                            result = ma.analyze(fpath)
+                            if result.get('hidden_data') or result.get('anomalies'):
+                                rpt(f"  [!] {fname} — Media anomalies detected")
+                                for a in result.get('anomalies', []):
+                                    rpt(f"      Anomaly: {a}")
+                                if result.get('hidden_data'):
+                                    rpt(f"      Hidden data: {result['hidden_data']} bytes after end marker")
+                        except ImportError:
+                            pass
+
+                        try:
+                            from engines.stego_detection import SteganographyDetector
+                            sd = SteganographyDetector()
+                            result = sd.analyze(fpath)
+                            if result.get('suspected'):
+                                rpt(f"  [!] {fname} — Steganography suspected")
+                                for clue in result.get('clues', []):
+                                    rpt(f"      {clue}")
+                        except ImportError:
+                            pass
+                    except Exception as e:
+                        rpt(f"  [!] {fname} — deep analysis error: {e}")
+
+                # ── Section 4: Network IOCs ──
+                if want("4"):
+                    try:
+                        import re
+                        with open(fpath, 'rb') as f:
+                            data = f.read(65536)
+                        text = data.decode('utf-8', errors='ignore')
+
+                        ip_re = re.compile(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b')
+                        domain_re = re.compile(r'\b([a-zA-Z0-9-]+\.(com|net|org|io|xyz|top|info|biz|ru|cn|tk|ml|ga|cf|gq))\b')
+                        url_re = re.compile(r'(https?://[^\s"\'<>]{5,})')
+
+                        for ip in ip_re.findall(text):
+                            octets = ip.split('.')
+                            if all(0 <= int(o) <= 255 for o in octets):
+                                ioc_ips.add(ip)
+                        for dom, _ in domain_re.findall(text):
+                            ioc_domains.add(dom.lower())
+                        for url in url_re.findall(text):
+                            ioc_urls.add(url[:200])
+                    except Exception:
+                        pass
+
+                # ── Section 6: Quarantine ──
+                if want("6") and all_findings:
+                    try:
+                        if self.quarantine_mgr:
+                            for fq, fnd in all_findings:
+                                if fq == fpath:
+                                    scan_result = self._findings_to_scan_result(fpath, fnd)
+                                    crit_only = [f for f in fnd if f.get('severity') in ('critical','high')]
+                                    if crit_only:
+                                        qid = self.quarantine_mgr.quarantine(fpath, scan_result, force=True)
+                                        if qid:
+                                            quarantine_count += 1
+                                            rpt(f"  [LOCKED] {fname} quarantined (ID: {qid})")
+                    except Exception:
+                        pass
+
+                progress.advance(task)
+
+        # ── Section 2: Sanitizer ──
+        if want("2"):
+            try:
+                from engines.sanitizer import PolyglotSanitizer
+                s = PolyglotSanitizer()
+                rpt()
+                rpt("-" * 70)
+                rpt("  SANITIZATION RESULTS")
+                rpt("-" * 70)
+                for fpath in files:
+                    fname = os.path.basename(fpath)
+                    try:
+                        result = s.sanitize(fpath, backup=True)
+                        if result.get('status') == 'sanitized':
+                            sanitize_count += 1
+                            rpt(f"  [SANITIZED] {fname} — {result.get('detail', '')}")
+                        elif result.get('safe_metadata'):
+                            rpt(f"  [SAFE] {fname} — {result.get('detail', '')} (metadata only)")
+                        else:
+                            rpt(f"  [OK] {fname} — {result.get('detail', 'no issues')}")
+                    except Exception as e:
+                        rpt(f"  [ERR] {fname} — {e}")
+            except ImportError:
+                rpt("  [!] Sanitizer engine not available")
+
+        # ── Section 5: Blue Side Indicators ──
+        if want("5"):
+            try:
+                from engines.blue_side import BlueSideEngine
+                bs = BlueSideEngine()
+                rpt()
+                rpt("-" * 70)
+                rpt("  BLUE SIDE INDICATORS")
+                rpt("-" * 70)
+                indicators = bs.analyze_directory(os.path.abspath(target))
+                if indicators:
+                    for ind in indicators:
+                        rpt(f"  [{ind.get('severity','info').upper()}] {ind.get('type','')}: {ind.get('detail','')}")
+                else:
+                    rpt("  No blue-side indicators detected.")
+            except ImportError:
+                rpt("  [!] Blue Side engine not available")
+
+        # ── Network IOCs Summary ──
+        if want("4") and (ioc_ips or ioc_domains or ioc_urls):
+            rpt()
+            rpt("-" * 70)
+            rpt("  NETWORK IOCs (Indicators of Compromise)")
+            rpt("-" * 70)
+            if ioc_ips:
+                rpt(f"  IPs ({len(ioc_ips)}):")
+                for ip in sorted(ioc_ips)[:50]:
+                    rpt(f"    {ip}")
+            if ioc_domains:
+                rpt(f"  Domains ({len(ioc_domains)}):")
+                for dom in sorted(ioc_domains)[:50]:
+                    rpt(f"    {dom}")
+            if ioc_urls:
+                rpt(f"  URLs ({len(ioc_urls)}):")
+                for url in sorted(ioc_urls)[:30]:
+                    rpt(f"    {url}")
+
+        # ── Final Summary ──
+        rpt()
+        rpt("=" * 70)
+        rpt("  SUMMARY")
+        rpt("=" * 70)
+        rpt(f"  Files scanned   : {len(files)}")
+        rpt(f"  Threats found   : {total_threats}")
+        rpt(f"  Warnings        : {total_warnings}")
+        rpt(f"  Clean           : {total_clean}")
+        if sanitize_count:
+            rpt(f"  Sanitized       : {sanitize_count}")
+        if quarantine_count:
+            rpt(f"  Quarantined     : {quarantine_count}")
+        if ioc_ips:
+            rpt(f"  IOC IPs         : {len(ioc_ips)}")
+        if ioc_domains:
+            rpt(f"  IOC Domains     : {len(ioc_domains)}")
+        if ioc_urls:
+            rpt(f"  IOC URLs        : {len(ioc_urls)}")
+        rpt()
+
+        if total_threats > 0:
+            rpt("  ⚠  ACTION REQUIRED: Critical/High threats detected!")
+            rpt("  ⚠  Review the findings above and take appropriate action.")
+        else:
+            rpt("  ✅ No critical threats detected.")
+        rpt()
+        rpt("=" * 70)
+        rpt(f"  Report saved to: {report_path}")
+        rpt("=" * 70)
+
+        # Write report file
+        with open(report_path, 'w') as f:
+            f.write('\n'.join(report_lines))
+
+        # Display summary to console
+        console.print()
+        console.print(Panel(
+            f"[bold]📊 REPORT COMPLETE[/bold]\n\n"
+            f"  Files scanned : {len(files)}\n"
+            f"  Threats       : [red]{total_threats}[/red]\n"
+            f"  Warnings      : [yellow]{total_warnings}[/yellow]\n"
+            f"  Clean         : [green]{total_clean}[/green]\n"
+            f"  Sanitized     : {sanitize_count}\n"
+            f"  Quarantined   : {quarantine_count}\n"
+            f"  IOC IPs       : {len(ioc_ips)}\n"
+            f"  IOC Domains   : {len(ioc_domains)}\n"
+            f"  IOC URLs      : {len(ioc_urls)}\n\n"
+            f"  Report saved to:\n  [cyan]{report_path}[/cyan]",
+            border_style="green" if total_threats == 0 else "red",
+            title="Report"
+        ))
+
+        # Notification
+        if total_threats > 0:
+            Notifier.send("SECURITY REPORT", f"{total_threats} threats in {len(files)} files!", "critical")
+        else:
+            Notifier.send("SECURITY REPORT", f"All {len(files)} files clean", "normal")
+
     def main_menu(self):
         self.banner()
         while True:
@@ -1073,13 +2122,12 @@ class PolyglotTUI:
                 "  [bold red]10[/bold red] │ 📡 [white]Monitoring Panel[/white]\n"
                 "  [bold red]11[/bold red] │ 🔍 [white]Investigation Panel[/white]\n"
                 "  [bold red]12[/bold red] │ 🧪 [white]Benchmark & Fuzzing[/white]\n"
-                "  [bold red]13[/bold red] │ 💣 [white]Payload & Evasion[/white]\n"
-                "  [bold red]14[/bold red] │ 🏠 [white]Session & Workspace[/white]\n"
-                "  [bold red]15[/bold red] │ 🌐 [white]Network Tools[/white]\n"
-                "  [bold red]16[/bold red] │ 🔢 [white]Hex Editor[/white]\n"
-                "  [bold red]17[/bold red] │ ⚔  [white]Exploitation & Attack Paths[/white]\n"
-                "  [bold red]18[/bold red] │ 🔵 [white]Blue Side Monitoring[/white]\n"
-                "  [bold red]19[/bold red] │ 🔒 [white]Quarantine Vault[/white]\n"
+                "  [bold red]13[/bold red] │ 🏠 [white]Session & Workspace[/white]\n"
+                "  [bold red]14[/bold red] │ 🌐 [white]Network Tools[/white]\n"
+                "  [bold red]15[/bold red] │ 🔢 [white]Hex Editor[/white]\n"
+                "  [bold red]16[/bold red] │ 🔵 [white]Blue Side Monitoring[/white]\n"
+                "  [bold red]17[/bold red] │ 🔒 [white]Quarantine Vault[/white]\n"
+                "  [bold red]18[/bold red] │ 📊 [white]Comprehensive Report[/white]\n"
                 "  [bold red]0[/bold red] │ ✕  [dim]Exit[/dim]\n",
                 title="[bold red]◆ POLYGLOT[/bold red]",
                 subtitle="[dim]v3.0 — Red Team + Shield Edition[/dim]",
@@ -1088,7 +2136,7 @@ class PolyglotTUI:
             ))
 
             choice = self.safe_input("\n[bold red]Select[/bold red]",
-                                     choices=["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19"],
+                                     choices=["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18"],
                                      default="1")
             if choice is None:
                 continue
@@ -1097,43 +2145,41 @@ class PolyglotTUI:
                 console.print("\n[dim]Stay stealthy. ── Mr-DS-ML-85[/dim]\n")
                 sys.exit(0)
             elif choice == "1":
-                self.menu_builder()
+                self._safe_menu_call(self.menu_builder)
             elif choice == "2":
-                self.menu_detector()
+                self._safe_menu_call(self.menu_detector)
             elif choice == "3":
-                self.menu_sanitizer()
+                self._safe_menu_call(self.menu_sanitizer)
             elif choice == "4":
-                self.menu_monitor()
+                self._safe_menu_call(self.menu_monitor)
             elif choice == "5":
-                self.menu_dashboard()
+                self._safe_menu_call(self.menu_dashboard)
             elif choice == "6":
-                self.menu_log()
+                self._safe_menu_call(self.menu_log)
             elif choice == "7":
-                self.menu_recover()
+                self._safe_menu_call(self.menu_recover)
             elif choice == "8":
-                self.menu_server()
+                self._safe_menu_call(self.menu_server)
             elif choice == "9":
-                self.menu_deep_analysis()
+                self._safe_menu_call(self.menu_deep_analysis)
             elif choice == "10":
-                self.menu_monitoring()
+                self._safe_menu_call(self.menu_monitoring)
             elif choice == "11":
-                self.menu_investigation()
+                self._safe_menu_call(self.menu_investigation)
             elif choice == "12":
-                self.menu_benchmark()
+                self._safe_menu_call(self.menu_benchmark)
             elif choice == "13":
-                self.menu_payload_evasion()
+                self._safe_menu_call(self.menu_session_workspace)
             elif choice == "14":
-                self.menu_session_workspace()
+                self._safe_menu_call(self.menu_network_tools)
             elif choice == "15":
-                self.menu_network_tools()
+                self._safe_menu_call(self.menu_hex_editor)
             elif choice == "16":
-                self.menu_hex_editor()
+                self._safe_menu_call(self.menu_blue_side)
             elif choice == "17":
-                self.menu_exploitation()
+                self._safe_menu_call(self.menu_quarantine)
             elif choice == "18":
-                self.menu_blue_side()
-            elif choice == "19":
-                self.menu_quarantine()
+                self._safe_menu_call(self.menu_report)
 
     # ── Builder Menu ─────────────────────────────────────────
 
@@ -1197,6 +2243,22 @@ class PolyglotTUI:
                                          choices=["windows","macos"], default="windows")
             if target_os is None: return
 
+        # Architecture selection
+        arch_choices = {
+            "1": "x86-64", "2": "arm64", "3": "arm32",
+        }
+        arch = self.safe_input(
+            "[bold cyan]Architecture[/bold cyan]\n"
+            "  [cyan]1[/cyan] → x86-64 (default)\n"
+            "  [cyan]2[/cyan] → ARM64 (AArch64)\n"
+            "  [cyan]3[/cyan] → ARM32 (ARMv7, Linux only)",
+            choices=["x86-64", "arm64", "arm32"], default="x86-64")
+        if arch is None: return
+        # Validate arm32 only for linux
+        if arch == 'arm32' and target_os != 'linux':
+            console.print("[bold red]✗ ARM32 only supported on Linux[/bold red]")
+            return
+
         encrypt = self.safe_confirm("[bold cyan]XOR encrypt payload?[/bold cyan]", default=False)
         if encrypt is None: return
         fud = vector == "2"
@@ -1213,7 +2275,7 @@ class PolyglotTUI:
                 progress.update(task, advance=30)
                 stats = self.builder.build(cover, payload, output,
                     container_type=container, encrypt=encrypt, fud=fud, mime_confuse=mime,
-                    payload_type=payload_type, target_os=target_os)
+                    payload_type=payload_type, target_os=target_os, arch=arch)
                 progress.update(task, advance=70)
             except Exception as e:
                 console.print(f"\n[bold red]✗ ERROR: {e}[/bold red]")
@@ -2476,14 +3538,13 @@ class PolyglotTUI:
 
     def menu_benchmark(self):
         console.print()
-        console.print(Panel("[bold yellow]🧪 BENCHMARK & FUZZING[/bold yellow]", border_style="yellow"))
+        console.print(Panel("[bold yellow]🧪 BENCHMARK & ONNX[/bold yellow]", border_style="yellow"))
         console.print("  [yellow]1[/yellow] │ Generate Benchmark Dataset")
         console.print("  [yellow]2[/yellow] │ Run CI Regression Tests")
-        console.print("  [yellow]3[/yellow] │ Run Fuzzing Harness")
-        console.print("  [yellow]4[/yellow] │ ONNX Model Export + Validate")
+        console.print("  [yellow]3[/yellow] │ ONNX Model Export + Validate")
 
         choice = self.safe_input("\n[bold yellow]Select[/bold yellow]",
-                                 choices=["1","2","3","4"], default="1")
+                                 choices=["1","2","3"], default="1")
         if choice is None: return
 
         if choice == "1":
@@ -2514,24 +3575,6 @@ class PolyglotTUI:
                 console.print(f"[red]✗ Error: {e}[/red]")
 
         elif choice == "3":
-            iterations = self.safe_input("[cyan]Iterations[/cyan]", default="100")
-            if iterations is None: return
-            console.print(f"\n[cyan]Running fuzzer ({iterations} iterations)...[/cyan]")
-            try:
-                from engines.onnx_export import FuzzingHarness
-                fuzzer = FuzzingHarness()
-                results = fuzzer.fuzz_file_formats(int(iterations))
-                console.print(f"\n[bold]Fuzzing Results:[/bold]")
-                console.print(f"  Iterations: {results['iterations']}")
-                console.print(f"  [green]Handled: {results['handled']}[/green]")
-                console.print(f"  [yellow]Errors: {results['errors']}[/yellow]")
-                console.print(f"  [red]Crashes: {results['crashes']}[/red]")
-                for crash in results.get("crash_details", [])[:5]:
-                    console.print(f"  [red]  Crash #{crash['iteration']}: {crash['error'][:80]}[/red]")
-            except Exception as e:
-                console.print(f"[red]✗ Error: {e}[/red]")
-
-        elif choice == "4":
             console.print("\n[cyan]Exporting model to ONNX...[/cyan]")
             try:
                 from engines.onnx_export import ONNXExporter
@@ -2880,14 +3923,13 @@ class PolyglotTUI:
         console.print("  [blue]1[/blue] Network Logs       [blue]2[/blue] Request History")
         console.print("  [blue]3[/blue] WebSocket Monitor  [blue]4[/blue] DNS Lookup")
         console.print("  [blue]5[/blue] Whois Lookup       [blue]6[/blue] TCP Connect Tester")
-        console.print("  [blue]7[/blue] Raw Request Editor [blue]8[/blue] Connection Viewer")
-        console.print("  [blue]9[/blue] Process Viewer     [blue]10[/blue] Alerts Panel")
-        console.print("  [blue]11[/blue] File Change Mon   [blue]12[/blue] Audit Log")
+        console.print("  [blue]7[/blue] Connection Viewer  [blue]8[/blue] Process Viewer")
+        console.print("  [blue]9[/blue] File Change Monitor")
         choice = self.safe_input("\n[bold blue]Select[/bold blue]",
-                                 choices=[str(i) for i in range(1,13)], default="1")
+                                 choices=[str(i) for i in range(1,10)], default="1")
         if choice is None: return
         try:
-            from engines.network_tools import DNSLookup, WhoisLookup, TCPConnectTester, RawRequestEditor, RequestHistory
+            from engines.network_tools import DNSLookup, WhoisLookup, TCPConnectTester, RequestHistory
 
             if choice == "1":
                 h = RequestHistory()
@@ -2922,17 +3964,11 @@ class PolyglotTUI:
                         r = TCPConnectTester().test(host, int(port))
                         console.print(f"  {'OPEN' if r.get('open') else 'CLOSED'} ({r.get('latency_ms','')}ms)")
             elif choice == "7":
-                self._raw_request_editor()
-            elif choice == "8":
                 self._connection_viewer()
-            elif choice == "9":
+            elif choice == "8":
                 self._process_viewer()
-            elif choice == "10":
-                self._alerts_panel()
-            elif choice == "11":
+            elif choice == "9":
                 self._file_change_monitor()
-            elif choice == "12":
-                self._workspace_audit_log()
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
 
@@ -3135,11 +4171,20 @@ def main():
     elif args[0] == "monitor":
         tui = PolyglotTUI()
         tui.menu_monitor(cli_directory=args[1] if len(args) > 1 else None)
+    elif args[0] == "report":
+        tui = PolyglotTUI()
+        if len(args) < 2:
+            print("Usage: polyglot report <file_or_dir>", file=sys.stderr)
+            sys.exit(1)
+        # Directly call menu_report but set target automatically
+        import unittest.mock
+        with unittest.mock.patch.object(tui, 'safe_input', side_effect=[args[1], "all"]):
+            tui.menu_report()
     elif args[0] in ("help", "--help", "-h"):
         print(__doc__)
     else:
         print(f"Unknown command: {args[0]}", file=sys.stderr)
-        print("Commands: tui, build, scan, sanitize, monitor, help", file=sys.stderr)
+        print("Commands: tui, build, scan, sanitize, monitor, report, help", file=sys.stderr)
         sys.exit(1)
 
 

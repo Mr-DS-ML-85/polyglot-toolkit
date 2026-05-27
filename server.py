@@ -214,6 +214,14 @@ def api_scan():
             try:
                 feats = extract_features_from_file(tmp.name)
                 ml_result = state.model.predict_single(feats)
+                # Boost ML score when rule-based findings exist
+                if findings:
+                    sev_map = {'critical': 95, 'high': 80, 'warning': 50, 'info': 20}
+                    max_finding = max(sev_map.get(f2['severity'], 0) for f2 in findings)
+                    if max_finding > ml_result.get('risk_score', 0):
+                        ml_result['risk_score'] = float(max_finding)
+                        ml_result['label'] = 'polyglot'
+                        ml_result['risk_level'] = 'critical' if max_finding >= 90 else 'high' if max_finding >= 70 else 'warning' if max_finding >= 40 else 'info'
             except Exception as ml_err:
                 logger.warning(f"ML prediction failed: {ml_err}")
 
@@ -235,6 +243,20 @@ def api_scan():
                 'detail': '; '.join(f2['detail'] for f2 in crit[:3]),
             }
             state.alerts.appendleft(alert)
+            # Write to audit log so TUI/CLI/GUI can see it
+            try:
+                audit_path = os.path.expanduser("~/.polyglot/audit.jsonl")
+                os.makedirs(os.path.dirname(audit_path), exist_ok=True)
+                import json
+                with open(audit_path, "a") as af:
+                    for ff in crit:
+                        entry = {"time": datetime.now().isoformat(), "file": safe_name,
+                                 "severity": ff.get("severity","warning"), "type": ff.get("type",""),
+                                 "detail": ff.get("detail",""), "offset": ff.get("offset",0),
+                                 "source": "webui"}
+                        af.write(json.dumps(entry) + "\n")
+            except Exception:
+                pass
 
         result = {
             'filename': safe_name,
@@ -380,6 +402,14 @@ def api_build():
         stats = state.builder.build(safe_cover, safe_payload, output, container, encrypt, fud, mime,
                                      payload_type=payload_type, target_os=target_os)
         state.stats['built'] += 1
+        # Generate a temp ID for download
+        import uuid
+        dl_id = str(uuid.uuid4())[:8]
+        if not hasattr(state, 'build_downloads'):
+            state.build_downloads = {}
+        state.build_downloads[dl_id] = output
+        stats['download_url'] = f'/api/build/download/{dl_id}'
+        stats['download_name'] = f'polyglot.{container}'
         return jsonify(stats)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -391,10 +421,31 @@ def api_build():
                     if tmp_path and tmp_path.startswith(tempfile.gettempdir()):
                         os.unlink(tmp_path)
                 except: pass
-        # Clean up output file
+
+@app.route('/api/build/download/<dl_id>')
+@require_api_key
+def api_build_download(dl_id):
+    """Download a built polyglot file."""
+    if not hasattr(state, 'build_downloads') or dl_id not in state.build_downloads:
+        return jsonify({'error': 'Download not found or expired'}), 404
+    filepath = state.build_downloads[dl_id]
+    if not os.path.exists(filepath):
+        del state.build_downloads[dl_id]
+        return jsonify({'error': 'File not found'}), 404
+    from flask import send_file
+    import threading
+    def cleanup():
+        import time
+        time.sleep(60)  # Clean up after 60 seconds
         try:
-            if os.path.exists(output): os.unlink(output)
+            if os.path.exists(filepath): os.unlink(filepath)
         except: pass
+        if dl_id in state.build_downloads:
+            del state.build_downloads[dl_id]
+    threading.Thread(target=cleanup, daemon=True).start()
+    return send_file(filepath, as_attachment=True,
+                     download_name=f'polyglot.{filepath.split(".")[-1]}',
+                     mimetype='application/octet-stream')
 
 @app.route('/api/quarantine')
 def api_quarantine():
@@ -944,6 +995,15 @@ async function buildPolyglot(){
     html+='</div></div>';
     document.getElementById('results').innerHTML=html;
     showToast('Polyglot built successfully','success');
+    // Auto-download the built file
+    if(r.download_url){
+      const a=document.createElement('a');
+      a.href=r.download_url;
+      a.download=r.download_name||'polyglot.bin';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   }catch(e){showToast('Build failed: '+e.message,'error')}
   finally{setLoading('btn-build',false);refresh()}
 }
