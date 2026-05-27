@@ -631,6 +631,7 @@ class PolyglotApp(QMainWindow):
         fbl.addWidget(gf_clear)
         content_layout.addWidget(file_bar)
         content_layout.addWidget(self.stack)
+        ml.addWidget(content_widget)
 
     def _nav_s(self, active):
         if active:
@@ -638,9 +639,13 @@ class PolyglotApp(QMainWindow):
         return f"QPushButton{{background:transparent;color:{T.DIM};border:none;border-left:3px solid transparent;padding:14px 20px;text-align:left;font-size:14px}}QPushButton:hover{{background:{T.BG3};color:{T.FG}}}"
 
     def _switch(self, idx, btn):
-        self.stack.setCurrentIndex(idx)
-        for b in self.nav: b.setStyleSheet(self._nav_s(False))
-        btn.setStyleSheet(self._nav_s(True))
+        try:
+            if hasattr(self, 'stack') and self.stack is not None:
+                self.stack.setCurrentIndex(idx)
+                for b in self.nav: b.setStyleSheet(self._nav_s(False))
+                btn.setStyleSheet(self._nav_s(True))
+        except RuntimeError:
+            pass  # Stack was deleted
 
     # ── Dashboard ────────────────────────────────────────────
 
@@ -2829,59 +2834,69 @@ class PolyglotApp(QMainWindow):
         self.scan_worker.start()
 
     def _on_scan_result(self, r):
-        sev_colors = {'critical':T.RED,'high':T.ORANGE,'warning':T.YELLOW,'clean':T.GREEN,'error':T.RED}
-        if 'ml_label' in r:
-            item = QTreeWidgetItem([r['file'], r['severity'].upper(), r['ml_label'],
-                                    f"{r['ml_risk']:.1f}%", f"{r.get('ml_conf',0)*100:.1f}%",
-                                    str(r['yara_count']),
-                                    str(r['findings']), ', '.join(r.get('yara_rules',[])[:3])])
-        else:
-            details = '; '.join(f['detail'] for f in r.get('details',[])[:3])
-            item = QTreeWidgetItem([r['file'], r['severity'].upper(), '—', '—', '—', '—',
-                                    str(r.get('findings',0)), details])
-        color = sev_colors.get(r['severity'], T.FG)
-        for i in range(8): item.setForeground(i, QColor(color))
-        self.s_tree.addTopLevelItem(item)
-        self.counts['scanned'] += 1; self.d_scanned._val.setText(str(self.counts['scanned']))
+        try:
+            sev_colors = {'critical':T.RED,'high':T.ORANGE,'warning':T.YELLOW,'clean':T.GREEN,'error':T.RED}
+            if 'ml_label' in r:
+                item = QTreeWidgetItem([r['file'], r['severity'].upper(), r['ml_label'],
+                                        f"{r['ml_risk']:.1f}%", f"{r.get('ml_conf',0)*100:.1f}%",
+                                        str(r['yara_count']),
+                                        str(r['findings']), ', '.join(r.get('yara_rules',[])[:3])])
+            else:
+                details = '; '.join(f['detail'] for f in r.get('details',[])[:3])
+                item = QTreeWidgetItem([r['file'], r['severity'].upper(), '—', '—', '—', '—',
+                                        str(r.get('findings',0)), details])
+            color = sev_colors.get(r['severity'], T.FG)
+            for i in range(8): item.setForeground(i, QColor(color))
+            self.s_tree.addTopLevelItem(item)
+            self.counts['scanned'] += 1; self.d_scanned._val.setText(str(self.counts['scanned']))
+        except RuntimeError:
+            pass  # Widget deleted
 
     def _on_scan_done(self, stats):
-        self._log(f"Scan complete: {stats['total']} files, {stats['threats']} threats",
-                  "critical" if stats['threats']>0 else "success")
-        self.counts['threats'] += stats['threats']; self.d_threats._val.setText(str(self.counts['threats']))
-        if stats['threats']>0:
-            Notifier.send("THREATS DETECTED",f"{stats['threats']} threats in {stats['total']} files","critical")
-            append_log(self.d_alerts, f"[{datetime.now().strftime('%H:%M:%S')}] ⚠ {stats['threats']} threats in {stats['total']} files", T.RED)
-            # Auto-quarantine: offer to quarantine files flagged as threats
-            if stats.get('threat_files'):
-                reply = QMessageBox.question(self, "Quarantine Threats",
-                    f"{stats['threats']} threats detected. Quarantine {len(stats['threat_files'])} files?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                if reply == QMessageBox.StandardButton.Yes:
-                    quarantined = 0
-                    for fpath, findings in stats['threat_files']:
-                        scan_result = self._findings_to_scan_result(fpath, findings)
-                        qid = self.q_manager.quarantine(fpath, scan_result, force=True)
-                        if qid: quarantined += 1
-                    self._log(f"Quarantined {quarantined} files", "critical")
-                    self._refresh_quarantine()
+        try:
+            self._log(f"Scan complete: {stats['total']} files, {stats['threats']} threats",
+                      "critical" if stats['threats']>0 else "success")
+            self.counts['threats'] += stats['threats']; self.d_threats._val.setText(str(self.counts['threats']))
+            if stats['threats']>0:
+                Notifier.send("THREATS DETECTED",f"{stats['threats']} threats in {stats['total']} files","critical")
+                if hasattr(self, 'd_alerts'):
+                    append_log(self.d_alerts, f"[{datetime.now().strftime('%H:%M:%S')}] ⚠ {stats['threats']} threats in {stats['total']} files", T.RED)
+                # Auto-quarantine: offer to quarantine files flagged as threats
+                if stats.get('threat_files'):
+                    reply = QMessageBox.question(self, "Quarantine Threats",
+                        f"{stats['threats']} threats detected. Quarantine {len(stats['threat_files'])} files?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                    if reply == QMessageBox.StandardButton.Yes:
+                        quarantined = 0
+                        for fpath, findings in stats['threat_files']:
+                            scan_result = self._findings_to_scan_result(fpath, findings)
+                            qid = self.q_manager.quarantine(fpath, scan_result, force=True)
+                            if qid: quarantined += 1
+                        self._log(f"Quarantined {quarantined} files", "critical")
+                        self._refresh_quarantine()
+        except RuntimeError:
+            pass  # Widget deleted
 
     # ── Monitor Action ───────────────────────────────────────
 
     def _toggle_monitor(self):
-        if self.mon_worker and self.mon_worker.running:
-            self.mon_worker.stop_watch(); self.m_btn.setText("▶ START")
-            self.m_btn.setStyleSheet(f"background:{T.GREEN};color:white;border:none;border-radius:6px;padding:10px 24px;font-weight:bold")
-            self._log("Monitor stopped","warning")
-        else:
-            d = self.m_dir.text().strip()
-            if not os.path.isdir(d): QMessageBox.warning(self,"Error","Select a valid directory"); return
-            self.m_btn.setText("■ STOP")
-            self.m_btn.setStyleSheet(f"background:{T.RED};color:white;border:none;border-radius:6px;padding:10px 24px;font-weight:bold")
-            self._log(f"Monitoring: {d}","success")
-            self.mon_worker = MonitorWorker()
-            self.mon_worker.alert.connect(self._on_monitor_alert)
-            self.mon_worker.stats.connect(self._on_monitor_stats)
-            self.mon_worker.start_watch(d)
+        try:
+            if self.mon_worker and self.mon_worker.running:
+                self.mon_worker.stop_watch(); self.m_btn.setText("▶ START")
+                self.m_btn.setStyleSheet(f"background:{T.GREEN};color:white;border:none;border-radius:6px;padding:10px 24px;font-weight:bold")
+                self._log("Monitor stopped","warning")
+            else:
+                d = self.m_dir.text().strip()
+                if not os.path.isdir(d): QMessageBox.warning(self,"Error","Select a valid directory"); return
+                self.m_btn.setText("■ STOP")
+                self.m_btn.setStyleSheet(f"background:{T.RED};color:white;border:none;border-radius:6px;padding:10px 24px;font-weight:bold")
+                self._log(f"Monitoring: {d}","success")
+                self.mon_worker = MonitorWorker()
+                self.mon_worker.alert.connect(self._on_monitor_alert)
+                self.mon_worker.stats.connect(self._on_monitor_stats)
+                self.mon_worker.start_watch(d)
+        except RuntimeError:
+            pass  # Widget deleted
 
     def _findings_to_scan_result(self, filepath, findings):
         """Convert detector findings to QuarantineManager scan_result format."""
@@ -2901,23 +2916,33 @@ class PolyglotApp(QMainWindow):
         }
 
     def _on_monitor_alert(self, a):
-        append_log(self.m_feed, f"[{a['time']}] [{a['severity'].upper()}] {a['file']}", T.RED)
-        append_log(self.m_feed, f"  → {a['detail']}", T.DIM)
-        append_log(self.d_alerts, f"[{a['time']}] ⚠ {a['file']}: {a['detail']}", T.RED)
-        self.counts['threats'] += 1; self.d_threats._val.setText(str(self.counts['threats']))
-        # Auto-quarantine monitored threats
-        if a.get('path') and a.get('findings') and hasattr(self, 'q_manager'):
-            scan_result = self._findings_to_scan_result(a['path'], a['findings'])
-            qid = self.q_manager.quarantine(a['path'], scan_result, force=True)
-            if qid:
-                append_log(self.d_alerts, f"  🔒 Quarantined {a['file']} (ID: {qid})", T.ORANGE)
-                self._log(f"Auto-quarantined: {a['file']}", "critical")
+        try:
+            if hasattr(self, 'm_feed'):
+                append_log(self.m_feed, f"[{a['time']}] [{a['severity'].upper()}] {a['file']}", T.RED)
+                append_log(self.m_feed, f"  → {a['detail']}", T.DIM)
+            if hasattr(self, 'd_alerts'):
+                append_log(self.d_alerts, f"[{a['time']}] ⚠ {a['file']}: {a['detail']}", T.RED)
+            self.counts['threats'] += 1
+            if hasattr(self, 'd_threats'):
+                self.d_threats._val.setText(str(self.counts['threats']))
+            # Auto-quarantine monitored threats
+            if a.get('path') and a.get('findings') and hasattr(self, 'q_manager'):
+                scan_result = self._findings_to_scan_result(a['path'], a['findings'])
+                qid = self.q_manager.quarantine(a['path'], scan_result, force=True)
+                if qid and hasattr(self, 'd_alerts'):
+                    append_log(self.d_alerts, f"  🔒 Quarantined {a['file']} (ID: {qid})", T.ORANGE)
+                    self._log(f"Auto-quarantined: {a['file']}", "critical")
+        except RuntimeError:
+            pass  # Widget deleted
 
     def _on_monitor_stats(self, s):
-        self.m_scanned._val.setText(str(s['scanned'])); self.m_threats._val.setText(str(s['threats'])); self.m_clean._val.setText(str(s['clean']))
-        # Dashboard shows total (scanner + monitor)
-        total_scanned = self.counts['scanned'] + s['scanned']
-        self.d_scanned._val.setText(str(total_scanned))
+        try:
+            if hasattr(self, 'm_scanned'):
+                self.m_scanned._val.setText(str(s['scanned']))
+                self.m_threats._val.setText(str(s['threats']))
+                self.m_clean._val.setText(str(s['clean']))
+        except RuntimeError:
+            pass  # Widget deleted
 
     # ── Training Action ──────────────────────────────────────
 
@@ -2929,13 +2954,17 @@ class PolyglotApp(QMainWindow):
         self.train_worker.start()
 
     def _on_train_done(self, meta):
-        if 'error' in meta:
-            self._log(f"Training failed: {meta['error']}","critical")
-        else:
-            self._log("Model trained and saved!","success")
-            try: self.model.load("models/polyglot_shield.cbm")
-            except: pass
-            self.s_use_ml.setChecked(self.model.is_loaded)
+        try:
+            if 'error' in meta:
+                self._log(f"Training failed: {meta['error']}","critical")
+            else:
+                self._log("Model trained and saved!","success")
+                try: self.model.load("models/polyglot_shield.cbm")
+                except: pass
+                if hasattr(self, 's_use_ml'):
+                    self.s_use_ml.setChecked(self.model.is_loaded)
+        except RuntimeError:
+            pass  # Widget deleted
 
     def _load_model(self):
         p,_ = QFileDialog.getOpenFileName(self,"Load Model","","CatBoost Model (*.cbm);;All Files (*)")
