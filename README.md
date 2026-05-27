@@ -3,13 +3,15 @@
 > **FOR EDUCATIONAL & AUTHORIZED SECURITY TESTING ONLY**
 > Unauthorized use against systems you don't own is illegal.
 
-Red team offensive toolkit + ML-powered defensive shield in one unified application. Build polyglot files, detect hidden threats, monitor directories in real-time, train ML models, run payload evasion, and investigate incidents — all from a single binary with 18 interactive menus.
+Red team offensive toolkit + ML-powered defensive shield in one unified application. Build polyglot files, detect hidden threats, monitor directories in real-time, train ML models, run payload evasion, and investigate incidents — all from a single binary with 18 TUI menus and 20 GUI panels.
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
 - [Features](#features)
+- [Obfuscation Techniques](#obfuscation-techniques-red-team)
 - [TUI Menus (18 Panels)](#tui-menus-18-panels)
+- [GUI Panels (20 Panels)](#gui-panels-20-panels)
 - [Engines](#engines)
 - [CLI Reference](#cli-reference)
 - [API Documentation](#api-documentation)
@@ -28,7 +30,7 @@ pip install -r requirements.txt
 # TUI (Rich terminal) — 18 interactive panels
 python polyglot.py
 
-# GUI (PyQt6)
+# GUI (PyQt6) — 20 panels
 python polyglot.py gui
 
 # CLI
@@ -75,7 +77,33 @@ Supported architecture combinations:
 
 **Obfuscation Flags:** `--encrypt`, `--fud`, `--mime`, `--payload-type`
 
-### Obfuscation Techniques (Red Team)
+### Scanner (Defense)
+
+- ML Detection — CatBoost classifier on 354 features (CPU/GPU)
+- YARA Rules — 49 built-in rules targeting RedTeam patterns
+- Format Parser Differential Analysis — 104 media formats
+- Steganography Detection — LSB, chi-square, histogram, entropy
+- PE/ELF Anomaly Analysis — section entropy, packing, import anomalies
+- Office Macro Static Analysis — 41 suspicious VBA functions
+- Archive Recursion Scanning — bomb detection, container nesting, path traversal
+
+### Sanitizer
+
+Strips trailing payloads from polyglot files with `.bak` backup support.
+
+### Real-Time Monitor
+
+Watchdog-based folder monitoring with auto-scan and desktop notifications.
+
+### Background Service
+
+Systemd/launchd/Scheduled Task daemon for persistent monitoring.
+
+### ML Training
+
+Synthetic data generation (76 polyglot types), CatBoost CPU/GPU training, feature importance analysis.
+
+## Obfuscation Techniques (Red Team)
 
 The toolkit implements 5 distinct obfuscation techniques, automatically selected based on payload type:
 
@@ -109,32 +137,6 @@ The decryptor runs first at load time:
 - PE: x86-64 (x86-64 decryptor with `push/pop rbx,rcx,rsi` + `xor [rsi],bl` loop)
 - ELF: x86-64, ARM64 (AArch64), ARM32 (ARMv7 with `ldrb/eor/strb` loop)
 - Mach-O: x86-64, ARM64 (skips Mach-O header + load commands, encrypts code only)
-
-### Scanner (Defense)
-
-- ML Detection — CatBoost classifier on 354 features (CPU/GPU)
-- YARA Rules — 49 built-in rules targeting RedTeam patterns
-- Format Parser Differential Analysis — 104 media formats
-- Steganography Detection — LSB, chi-square, histogram, entropy
-- PE/ELF Anomaly Analysis — section entropy, packing, import anomalies
-- Office Macro Static Analysis — 41 suspicious VBA functions
-- Archive Recursion Scanning — bomb detection, container nesting, path traversal
-
-### Sanitizer
-
-Strips trailing payloads from polyglot files with `.bak` backup support.
-
-### Real-Time Monitor
-
-Watchdog-based folder monitoring with auto-scan and desktop notifications.
-
-### Background Service
-
-Systemd/launchd/Scheduled Task daemon for persistent monitoring.
-
-### ML Training
-
-Synthetic data generation (76 polyglot types), CatBoost CPU/GPU training, feature importance analysis.
 
 ## TUI Menus (18 Panels)
 
@@ -255,6 +257,41 @@ Flask REST API + embedded web dashboard with 12 endpoints.
 - Quarantine Threats
 - Generates unified report file in ~/.polyglot/reports/
 
+## GUI Panels (20 Panels)
+
+The PyQt6 GUI mirrors all 18 TUI menus plus additional integrated views:
+
+| # | Panel | Description |
+|---|-------|-------------|
+| 0 | **Dashboard** | Scan stats, threat breakdown, ML model status, quick actions |
+| 1 | **Builder** | Polyglot builder with 8 containers, 9 payload types, multi-arch support |
+| 2 | **Scanner** | ML-powered file scanner with 354 features, 49 YARA rules |
+| 3 | **Monitor** | Watchdog-based directory monitoring with auto-quarantine |
+| 4 | **ML Training** | Synthetic data generation, CatBoost CPU/GPU training |
+| 5 | **Quarantine** | Encrypted quarantine vault with restore/purge/delete |
+| 6 | **YARA Rules** | 49 built-in YARA rules browser with severity ratings |
+| 7 | **Activity Log** | Full scan history with severity filtering, search, date range, CSV export |
+| 8 | **Settings** | Detection thresholds, notification settings, model configuration |
+| 9 | **Report** | Comprehensive report generator (6 sections) |
+| 10 | **Recover .bak** | Scan directories for .bak files, restore individually or all |
+| 11 | **Server** | Start/stop Flask REST API, 12 endpoint docs, server log |
+| 12 | **Deep Analysis** | 6 engines: format, stego, PE, ELF, office, archive |
+| 13 | **Monitoring** | 10 sub-tabs: live logs, events, processes, connections, alerts, changes, terminal, audit, replay, metrics |
+| 14 | **Investigation** | 9 sub-tabs: searchable logs, timeline, snapshots, correlation, tagged, bookmarks, export, notes, evidence |
+| 15 | **Benchmark** | Benchmark datasets, CI regression testing, ONNX export |
+| 16 | **Workspace** | 8 sub-tabs: sessions, pinned, recent, snapshots, notes, chains, regex, auto-detect IOCs |
+| 17 | **Net Tools** | 5 sub-tabs: DNS (A/AAAA/MX/NS/TXT/CNAME/SOA), whois, TCP connect, raw HTTP, history |
+| 18 | **Hex Editor** | Hex dump, entropy map, format detection (20+ signatures), hex/ASCII search |
+| 19 | **Blue Side** | 9 sub-tabs: net logs, history, WebSocket, DNS, whois, TCP, connections, processes, file changes |
+
+**GUI Features:**
+- Dark theme with Consolas/SF Pro monospace typography
+- Styled cards, stat widgets, progress bars
+- Threaded scanning/training (non-blocking UI)
+- Desktop notifications (Linux/macOS/Windows)
+- Auto-quarantine on threat detection
+- Real-time monitoring feed with alert sounds
+
 ## Engines
 
 ```
@@ -290,7 +327,8 @@ polyglot build <cover> <payload> [options]
   --type <jpeg|png|gif|pdf|zip|mp4|xlsx|docx>
   --payload-type <exe|vbs|ps1|bash|sh|python|applescript|xlsx|docx>
   --target-os <windows|linux|macos|all>
-  --encrypt --fud --mime --output <path>
+  --arch <x86-64|arm64|arm32>
+  --encrypt --fud --mime --stealth --output <path>
 
 # Scanner
 polyglot scan <file_or_dir>
@@ -311,7 +349,7 @@ polyglot service start|stop|status|install|uninstall
 polyglot server [--port 8888]
 
 # Modes
-polyglot gui          # PyQt6 GUI
+polyglot gui          # PyQt6 GUI (20 panels)
 polyglot tui          # Rich TUI (18 panels)
 polyglot              # Auto-detect (GUI if display, else TUI)
 ```
@@ -321,17 +359,18 @@ polyglot              # Auto-detect (GUI if display, else TUI)
 REST API at `http://localhost:8888` when running `polyglot server`.
 
 **Endpoints:**
+- `GET /api/health` — Health check
 - `POST /api/scan` — Scan file for polyglot threats
 - `POST /api/sanitize` — Sanitize file (remove trailing payloads)
 - `POST /api/build` — Build polyglot file
 - `GET /api/quarantine` — List quarantined files
+- `POST /api/quarantine/add` — Add file to quarantine
 - `POST /api/quarantine/restore` — Restore quarantined file
-- `GET /api/status` — System status + model accuracy
-- `GET /api/yara` — List YARA rules
-- `GET /api/config` — Get configuration
-- `POST /api/config` — Update configuration
-- `POST /api/train` — Start ML training
-- `GET /api/logs` — Recent scan/activity logs
+- `GET /api/model/info` — Model info + accuracy
+- `POST /api/model/train` — Start ML training
+- `GET /api/yara/rules` — List YARA rules
+- `GET /api/stats` — Dashboard statistics
+- `POST /api/report` — Generate comprehensive report
 - `GET /` — Web dashboard (embedded HTML)
 
 **Build API with Architecture:**
@@ -392,8 +431,8 @@ All binaries validated by `file` command and hex editor inspection.
 
 ```
 polyglot.py          — Single entry point (CLI/TUI/GUI/server/service)
-polyglot_tui.py      — Rich TUI (18 interactive panels, 2900+ lines)
-polyglot_app.py      — PyQt6 GUI (9 panels)
+polyglot_tui.py      — Rich TUI (18 interactive panels, 4900+ lines)
+polyglot_app.py      — PyQt6 GUI (20 panels, 2600+ lines)
 server.py            — Flask API + embedded web dashboard
 daemon.py            — Cross-platform background monitor service
 engines/             — 21 engine modules (see Engines section)
