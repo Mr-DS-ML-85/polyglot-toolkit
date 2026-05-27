@@ -81,7 +81,7 @@ def train(csv_path, task_type="GPU", output="models/polyglot_shield.cbm"):
         "depth": 8,
         "l2_leaf_reg": 5,
         "early_stopping_rounds": 100,
-        "class_weights": [1.0, 3.0],  # Penalize false negatives more
+        "auto_class_weights": "Balanced",  # Auto-balance classes
     }
 
     model = PolyglotModel(config)

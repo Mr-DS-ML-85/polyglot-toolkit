@@ -330,7 +330,7 @@ class ScanWorker(QThread):
                     feats = extract_features_from_file(fpath)
                     pred = self.model.predict_single(feats)
                     yara = YaraEngine()
-                    yara_matches = yara.scan_file(fpath)
+                    yara_matches, _ = yara.scan_file(fpath)
                     findings = self.detector.scan_file(fpath)
                     r = {
                         'file': os.path.basename(fpath), 'path': fpath,
@@ -638,7 +638,7 @@ class PolyglotApp(QMainWindow):
 
         rc, rl = card("Scan Results","📊")
         self.s_tree = QTreeWidget()
-        self.s_tree.setHeaderLabels(["File","Severity","ML Label","Risk","YARA","Findings","Details"])
+        self.s_tree.setHeaderLabels(["File","Severity","ML Label","Risk","Confidence","YARA","Findings","Details"])
         self.s_tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.s_tree.setStyleSheet(f"QTreeWidget{{background:{T.BG};border:1px solid {T.BORDER};border-radius:8px}}")
         rl.addWidget(self.s_tree)
@@ -847,14 +847,15 @@ class PolyglotApp(QMainWindow):
         sev_colors = {'critical':T.RED,'high':T.ORANGE,'warning':T.YELLOW,'clean':T.GREEN,'error':T.RED}
         if 'ml_label' in r:
             item = QTreeWidgetItem([r['file'], r['severity'].upper(), r['ml_label'],
-                                    f"{r['ml_risk']:.1f}%", str(r['yara_count']),
+                                    f"{r['ml_risk']:.1f}%", f"{r.get('ml_conf',0)*100:.1f}%",
+                                    str(r['yara_count']),
                                     str(r['findings']), ', '.join(r.get('yara_rules',[])[:3])])
         else:
             details = '; '.join(f['detail'] for f in r.get('details',[])[:3])
-            item = QTreeWidgetItem([r['file'], r['severity'].upper(), '—', '—', '—',
+            item = QTreeWidgetItem([r['file'], r['severity'].upper(), '—', '—', '—', '—',
                                     str(r.get('findings',0)), details])
         color = sev_colors.get(r['severity'], T.FG)
-        for i in range(7): item.setForeground(i, QColor(color))
+        for i in range(8): item.setForeground(i, QColor(color))
         self.s_tree.addTopLevelItem(item)
         self.counts['scanned'] += 1; self.d_scanned._val.setText(str(self.counts['scanned']))
 

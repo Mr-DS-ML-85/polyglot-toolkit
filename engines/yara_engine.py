@@ -191,6 +191,43 @@ def _build_default_rules() -> List[YaraRule]:
         )],
     ))
 
+    # ── HIGH: Cross-platform script droppers in media files ─────────────
+    rules.append(YaraRule(
+        name="Bash_Dropper_In_Media", severity="high",
+        description="Bash script dropper embedded in image/document (Linux/macOS payload)",
+        patterns=[b"#!/bin/bash"],
+    ))
+    rules.append(YaraRule(
+        name="Sh_Dropper_In_Media", severity="high",
+        description="POSIX shell script dropper embedded in image/document",
+        patterns=[b"#!/bin/sh"],
+    ))
+    rules.append(YaraRule(
+        name="Python_Dropper_In_Media", severity="high",
+        description="Python script dropper embedded in image/document (cross-platform)",
+        patterns=[b"#!/usr/bin/env python3", b"#!/usr/bin/python3", b"#!/usr/bin/python"],
+    ))
+    rules.append(YaraRule(
+        name="AppleScript_Dropper_In_Media", severity="high",
+        description="AppleScript/osascript dropper embedded in image/document (macOS)",
+        patterns=[b"#!/usr/bin/osascript", b"osascript"],
+    ))
+    rules.append(YaraRule(
+        name="Base64_Shell_Payload", severity="high",
+        description="Base64-encoded payload with shell decode command",
+        patterns=[b"base64 -d", b"base64 -D", b"base64 --decode"],
+    ))
+    rules.append(YaraRule(
+        name="Shell_Exec_In_Media", severity="high",
+        description="Shell execution command found in non-script file",
+        regex_patterns=[re.compile(
+            rb"(?:CreateObject|WScript\.Shell|do shell script|subprocess\.Popen|os\.startfile)",
+        )],
+        condition_fn=lambda d: not d[:4] in (b"MZ\x90\x00", b"\x7fELF") and (
+            b"#!/bin/" in d[:200] or b"#!/usr/bin/" in d[:200]
+        ),
+    ))
+
     # ── MEDIUM: Suspicious structures ─────────────────────────────────────
     rules.append(YaraRule(
         name="VBA_Macro_Stream", severity="medium",

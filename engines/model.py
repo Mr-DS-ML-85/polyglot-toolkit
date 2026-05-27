@@ -47,7 +47,6 @@ class PolyglotModel:
             "verbose": c.get("verbose", 0),
             "early_stopping_rounds": c.get("early_stopping_rounds", 80),
             "loss_function": "Logloss",
-            "auto_class_weights": "Balanced",
             "max_ctr_complexity": 4,
             "boosting_type": "Plain",
             "bootstrap_type": "Bayesian",
@@ -58,6 +57,9 @@ class PolyglotModel:
         cw = c.get("class_weights")
         if cw:
             params["class_weights"] = cw
+        acw = c.get("auto_class_weights")
+        if acw:
+            params["auto_class_weights"] = acw
         if c.get("task_type", "GPU") == "GPU":
             params["gpu_ram_part"] = c.get("gpu_ram_fraction", 0.7)
             logger.info("CatBoost GPU mode (RTX 4060 optimized)")
@@ -69,10 +71,12 @@ class PolyglotModel:
               X_eval: np.ndarray = None, y_eval: np.ndarray = None) -> Dict:
         logger.info(f"Training: {X_train.shape[0]} samples, {X_train.shape[1]} features")
         self.model = self._build()
-        eval_set = (X_eval, y_eval) if X_eval is not None else None
         t0 = time.time()
-        self.model.fit(X_train, y_train, eval_set=eval_set,
-                       feature_names=self.feature_names)
+        # Use CatBoost Pool for feature names (fit() doesn't accept feature_names kwarg)
+        from catboost import Pool
+        train_pool = Pool(X_train, y_train, feature_names=list(self.feature_names) if self.feature_names is not None else None)
+        eval_pool = Pool(X_eval, y_eval, feature_names=list(self.feature_names) if self.feature_names is not None else None) if X_eval is not None else None
+        self.model.fit(train_pool, eval_set=eval_pool)
         elapsed = time.time() - t0
         best_iter = getattr(self.model, "best_iteration_", self.config.get("iterations", 1200))
         best_score = getattr(self.model, "best_score_", {})
@@ -81,7 +85,8 @@ class PolyglotModel:
             "eval_samples": int(X_eval.shape[0]) if X_eval is not None else 0,
             "n_features": int(X_train.shape[1]),
             "best_iteration": int(best_iter) if best_iter else 0,
-            "best_score": {k: float(v) for k, v in best_score.items()} if best_score else {},
+            "best_score": {k: float(v) if not isinstance(v, dict) else {kk: float(vv) for kk, vv in v.items()}
+                           for k, v in best_score.items()} if best_score else {},
             "training_time_sec": round(elapsed, 2),
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         }

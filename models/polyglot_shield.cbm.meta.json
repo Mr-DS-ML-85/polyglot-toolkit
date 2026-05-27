@@ -1,0 +1,16 @@
+{
+  "train_samples": 1584,
+  "eval_samples": 396,
+  "n_features": 338,
+  "best_iteration": 164,
+  "best_score": {
+    "learn": {
+      "Logloss": 0.009390657598322088
+    },
+    "validation": {
+      "Logloss": 0.0734505420560152
+    }
+  },
+  "training_time_sec": 12.0,
+  "timestamp": "2026-05-26 18:09:23"
+}

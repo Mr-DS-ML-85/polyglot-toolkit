@@ -51,6 +51,28 @@ POLYGLOT_TYPES = {
                          "desc": "VBS script in JPEG (RedTeam Builder: VBS→JPG)"},
     "ps1_in_png":       {"types": ["png", "ps1"], "severity": "high",
                          "desc": "PowerShell script in PNG"},
+
+    # ── Cross-Platform Script Polyglots (Linux + macOS) ───────
+    "bash_in_jpg":      {"types": ["jpg", "bash"], "severity": "high",
+                         "desc": "Bash dropper in JPEG (Linux/macOS)"},
+    "bash_in_png":      {"types": ["png", "bash"], "severity": "high",
+                         "desc": "Bash dropper in PNG (Linux/macOS)"},
+    "bash_in_pdf":      {"types": ["pdf", "bash"], "severity": "high",
+                         "desc": "Bash dropper in PDF (Linux/macOS)"},
+    "sh_in_jpg":        {"types": ["jpg", "sh"], "severity": "high",
+                         "desc": "POSIX sh dropper in JPEG (any Unix)"},
+    "sh_in_png":        {"types": ["png", "sh"], "severity": "high",
+                         "desc": "POSIX sh dropper in PNG (any Unix)"},
+    "py_in_jpg":        {"types": ["jpg", "py"], "severity": "high",
+                         "desc": "Python dropper in JPEG (cross-platform)"},
+    "py_in_png":        {"types": ["png", "py"], "severity": "high",
+                         "desc": "Python dropper in PNG (cross-platform)"},
+    "py_in_pdf":        {"types": ["pdf", "py"], "severity": "high",
+                         "desc": "Python dropper in PDF (cross-platform)"},
+    "scpt_in_jpg":      {"types": ["jpg", "scpt"], "severity": "high",
+                         "desc": "AppleScript/osascript in JPEG (macOS)"},
+    "scpt_in_png":      {"types": ["png", "scpt"], "severity": "high",
+                         "desc": "AppleScript/osascript in PNG (macOS)"},
     "js_in_gif":        {"types": ["gif", "js"], "severity": "high",
                          "desc": "JavaScript in GIF (GIF/JS polyglot)"},
     "js_in_jpg":        {"types": ["jpg", "js"], "severity": "high",
@@ -187,6 +209,24 @@ POLYGLOT_TYPES = {
                          "desc": "NES ROM in ZIP (Polydet: neszip-example)"},
     "mbr_in_pdf":       {"types": ["pdf", "mbr"], "severity": "high",
                          "desc": "MBR boot sector in PDF (pocorgtfo02)"},
+
+    # ── PNG+Script Polyglots (berylliumsec/polyglots) ───────────
+    "python_in_png":    {"types": ["png", "sh"], "severity": "high",
+                         "desc": "Python script in PNG (berylliumsec: dd if=img.png bs=1 skip=N | python3)"},
+    "shell_in_png":     {"types": ["png", "sh"], "severity": "high",
+                         "desc": "Shell script in PNG (berylliumsec: executable polyglot PNG)"},
+    "python_in_jpg":    {"types": ["jpg", "sh"], "severity": "high",
+                         "desc": "Python script in JPEG (dd extraction polyglot)"},
+
+    # ── XSS Polyglots (michenriksen/xss-polyglots) ─────────────
+    "xss_in_html":      {"types": ["html", "js"], "severity": "high",
+                         "desc": "XSS polyglot in HTML (michenriksen: cross-context XSS)"},
+    "xss_in_svg":       {"types": ["svg", "js"], "severity": "high",
+                         "desc": "XSS polyglot in SVG (onload/onmouseover injection)"},
+    "xss_in_gif":       {"types": ["gif", "js"], "severity": "high",
+                         "desc": "XSS polyglot in GIF (GIFAR + script injection)"},
+    "xss_in_jpg":       {"types": ["jpg", "js"], "severity": "high",
+                         "desc": "XSS polyglot in JPEG (CSP bypass via polyglot JPEG)"},
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -226,6 +266,9 @@ EXEC_HEADERS = {
     "vbs":  b"' Script\r\nCreateObject(",
     "ps1":  b'powershell -nop -w hidden -ep bypass',
     "sh":   b'#!/bin/sh\n',
+    "bash": b'#!/bin/bash\n',
+    "py":   b'#!/usr/bin/env python3\n',
+    "scpt": b'#!/usr/bin/osascript\n',
     "js":   b'function(){var ',
     "apk":  b'PK\x03\x04\x14\x00\x00\x08',
     "jar":  b'PK\x03\x04\x14\x00\x08\x00',
@@ -353,6 +396,29 @@ class ComprehensiveGenerator:
         cover_fmt = types[0]
         exec_fmt = types[1]
 
+        # ── PNG+Script polyglots (berylliumsec) ─────────────────
+        if ptype in ("python_in_png", "shell_in_png"):
+            data = self._make_png_script_polyglot("sh" if "shell" in ptype else "py")
+            ext = ".png"
+            path = self.mal_dir / f"{ptype}_{idx:04d}{ext}"
+            path.write_bytes(data)
+            return str(path)
+
+        if ptype == "python_in_jpg":
+            data = self._make_jpg_script_polyglot()
+            path = self.mal_dir / f"{ptype}_{idx:04d}.jpg"
+            path.write_bytes(data)
+            return str(path)
+
+        # ── XSS polyglots (michenriksen) ────────────────────────
+        if ptype.startswith("xss_in_"):
+            data = self._make_xss_polyglot(cover_fmt)
+            ext_map = {"html": ".html", "svg": ".svg", "gif": ".gif", "jpg": ".jpg"}
+            ext = ext_map.get(cover_fmt, ".bin")
+            path = self.mal_dir / f"{ptype}_{idx:04d}{ext}"
+            path.write_bytes(data)
+            return str(path)
+
         # Generate cover
         cover = self.make_cover(cover_fmt)
 
@@ -381,6 +447,66 @@ class ComprehensiveGenerator:
         path = self.mal_dir / fname
         path.write_bytes(polyglot)
         return str(path)
+
+    def _make_png_script_polyglot(self, script_type="py"):
+        """PNG+Script polyglot (berylliumsec technique).
+        Valid PNG with script appended after IEND. Extract: dd if=img.png bs=1 skip=N | python3"""
+        from PIL import Image as PILImage
+        import io
+        img = PILImage.new('RGB', (10, 10), color='blue')
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        png_data = buf.getvalue()
+        marker = b'\n#--PYTHON--#\n'
+        if script_type == "sh":
+            script = b'#!/bin/bash\necho "Polyglot executed"\n'
+        else:
+            script = b'#!/usr/bin/env python3\nprint("Polyglot executed")\n'
+        return png_data + marker + script + os.urandom(random.randint(10, 50))
+
+    def _make_jpg_script_polyglot(self):
+        """JPEG+Script polyglot."""
+        from PIL import Image as PILImage
+        import io
+        img = PILImage.new('RGB', (8, 8), color='red')
+        buf = io.BytesIO()
+        img.save(buf, format='JPEG')
+        jpg_data = buf.getvalue()
+        if jpg_data.endswith(b'\xff\xd9'):
+            jpg_data = jpg_data[:-2]
+        script = b'\n#!/usr/bin/env python3\nprint("JPEG polyglot")\n'
+        return jpg_data + script + b'\xff\xd9' + os.urandom(20)
+
+    def _make_xss_polyglot(self, fmt):
+        """XSS polyglot (michenriksen technique). Cross-context XSS payloads."""
+        xss_payloads = [
+            b'javascript:"/*\'/*`/*--></noscript></title></textarea></style></template></noembed></script><html \\" onmouseover=/*<svg/*/onload=alert()//>',
+            b'javascript:"/*\'/*`/*\\" /*</title></style></textarea></noscript></noembed></template></script/--><svg/onload=/*<html/*/onmouseover=alert()//>',
+            b'javascript:`//\\"//\\"//</title></textarea></style></noscript></noembed></script></template><svg/onload=\'/*--><html */ onmouseover=alert()//\'>`',
+            b'javascript:/*\"//\'//`//\\"//--></script></title></style></textarea></template></noembed></noscript><script>//<svg <frame */onload= alert()//</script>',
+            b'javascript:alert()//\\\"//`//\'//\"//-->`//*/ alert();//</title></textarea></noscript></noembed></template><frame onload=alert()></select></script><<svg onload=alert()>',
+        ]
+        xss = random.choice(xss_payloads)
+
+        if fmt == "html":
+            return b'<html><body>' + xss + b'<svg onload=alert()>' + os.urandom(20) + b'</body></html>'
+        elif fmt == "svg":
+            return (b'<svg xmlns="http://www.w3.org/2000/svg" onload="alert()">'
+                    b'<rect width="100" height="100" fill="red"/><!-- ' + xss + b' --></svg>' + os.urandom(20))
+        elif fmt == "gif":
+            gif = b'GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;'
+            return gif + b'<script>alert("GIFAR")</script>' + os.urandom(20)
+        elif fmt == "jpg":
+            from PIL import Image as PILImage
+            import io
+            img = PILImage.new('RGB', (8, 8), color='red')
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG')
+            jpg = buf.getvalue()
+            if jpg.endswith(b'\xff\xd9'):
+                jpg = jpg[:-2]
+            return jpg + b'\n<script>alert("JPEG-XSS")</script>\n' + b'\xff\xd9' + os.urandom(20)
+        return xss + os.urandom(50)
 
     def _gen_single_type(self, ptype, idx, fmt):
         """Generate packed/obfuscated single-type samples."""

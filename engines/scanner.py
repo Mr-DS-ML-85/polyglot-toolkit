@@ -107,9 +107,9 @@ class Scanner:
                 result.evidence.append("ML model not loaded — rule-based only")
 
             # 3. YARA scan
-            yara_matches = self.yara.scan(
-                open(filepath, "rb").read(), result.entropy
-            )
+            with open(filepath, "rb") as yf:
+                yara_data = yf.read()
+            yara_matches = self.yara.scan(yara_data, result.entropy)
             result.yara_matches = [
                 {"rule": m.rule_name, "severity": m.severity,
                  "score": m.score, "description": m.description,

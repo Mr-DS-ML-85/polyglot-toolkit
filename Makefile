@@ -105,6 +105,14 @@ dist: ## Build single binary with PyInstaller
 	@echo "[✓] Binary built: dist/polyglot"
 	@ls -lh dist/polyglot
 
+server: ## Start server mode (headless API + web dashboard)
+	@echo "[*] Starting PolyglotShield Server on :$(or $(PORT),8888)..."
+	$(PYTHON) server.py --port $(or $(PORT),8888)
+
+server-remote: ## Start server bound to 0.0.0.0 (remote access)
+	@echo "[*] Starting PolyglotShield Server (remote) on :$(or $(PORT),8888)..."
+	$(PYTHON) server.py --host 0.0.0.0 --port $(or $(PORT),8888)
+
 release: dist ## Build release binary + create archive
 	@echo "[*] Creating release archive..."
 	@mkdir -p releases

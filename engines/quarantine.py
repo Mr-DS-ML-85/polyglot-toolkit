@@ -17,21 +17,54 @@ METADATA_FILE = "metadata.jsonl"
 class QuarantineManager:
     """Manages quarantined files with full audit trail."""
 
+    # NEVER auto-quarantine below these thresholds
+    MIN_CONFIDENCE = 0.60
+    MIN_RISK_SCORE = 50.0
+    SAFE_RISK_LEVELS = {"UNKNOWN", "LOW", "CLEAN", "SAFE"}
+
     def __init__(self, quarantine_dir: str = "quarantine",
                  encrypt_names: bool = True, max_size_mb: int = 500,
-                 retain_days: int = 30):
+                 retain_days: int = 30,
+                 auto_quarantine: bool = False):
         self.quarantine_dir = Path(quarantine_dir)
         self.quarantine_dir.mkdir(parents=True, exist_ok=True)
         self.meta_path = self.quarantine_dir / METADATA_FILE
         self.encrypt_names = encrypt_names
         self.max_size_bytes = max_size_mb * 1024 * 1024
         self.retain_days = retain_days
+        self.auto_quarantine = auto_quarantine
 
-    def quarantine(self, filepath: str, scan_result: Dict) -> Optional[str]:
+    def should_quarantine(self, scan_result: Dict) -> bool:
+        """Check if a scan result meets quarantine thresholds.
+        NEVER quarantines files with UNKNOWN risk or zero confidence."""
+        conf = scan_result.get("confidence", 0.0)
+        risk = scan_result.get("risk_score", 0.0)
+        level = scan_result.get("risk_level", "UNKNOWN").upper()
+
+        # NEVER quarantine if no model loaded (UNKNOWN) or zero confidence
+        if level in self.SAFE_RISK_LEVELS:
+            return False
+        if conf < self.MIN_CONFIDENCE:
+            return False
+        if risk < self.MIN_RISK_SCORE:
+            return False
+        return True
+
+    def quarantine(self, filepath: str, scan_result: Dict,
+                   force: bool = False) -> Optional[str]:
         """
         Move file to quarantine. Returns quarantine ID or None on failure.
         scan_result should have: label, confidence, risk_score, yara_matches, etc.
+        By default, refuses to quarantine if confidence/risk is too low.
+        Pass force=True to override (manual quarantine from UI).
         """
+        # Safety check — don't auto-quarantine low-confidence results
+        if not force and not self.should_quarantine(scan_result):
+            logger.info(f"SKIP quarantine (below threshold): {filepath} "
+                        f"(risk={scan_result.get('risk_level','UNKNOWN')}, "
+                        f"conf={scan_result.get('confidence',0):.2f})")
+            return None
+
         src = Path(filepath)
         if not src.exists():
             logger.warning(f"File not found: {filepath}")
@@ -81,7 +114,7 @@ class QuarantineManager:
         return qid
 
     def restore(self, qid: str, dest_path: Optional[str] = None) -> Optional[str]:
-        """Restore a quarantined file by ID. Returns restored path."""
+        """Restore a quarantined file by ID (supports partial/prefix match)."""
         meta = self._find_meta(qid)
         if not meta:
             logger.error(f"Quarantine ID not found: {qid}")
@@ -159,6 +192,35 @@ class QuarantineManager:
             "vault_path": str(self.quarantine_dir.resolve()),
         }
 
+    def restore_all(self, dest_dir: Optional[str] = None) -> List[str]:
+        """Restore ALL quarantined files. Returns list of restored paths."""
+        restored = []
+        entries = self.list_quarantined()
+        for entry in entries:
+            qid = entry["quarantine_id"]
+            dest = None
+            if dest_dir:
+                dest = os.path.join(dest_dir, entry.get("original_name", f"restored_{qid[:8]}"))
+            result = self.restore(qid, dest)
+            if result:
+                restored.append(result)
+        return restored
+
+    def restore_by_name(self, name_substr: str, dest_dir: Optional[str] = None) -> List[str]:
+        """Restore quarantined files matching a name substring."""
+        restored = []
+        entries = self.list_quarantined()
+        for entry in entries:
+            if name_substr.lower() in entry.get("original_name", "").lower():
+                qid = entry["quarantine_id"]
+                dest = None
+                if dest_dir:
+                    dest = os.path.join(dest_dir, entry.get("original_name", f"restored_{qid[:8]}"))
+                result = self.restore(qid, dest)
+                if result:
+                    restored.append(result)
+        return restored
+
     # ── Internal helpers ──────────────────────────────────────────────────
 
     def _append_meta(self, meta: Dict):
@@ -180,9 +242,20 @@ class QuarantineManager:
         return entries
 
     def _find_meta(self, qid: str) -> Optional[Dict]:
-        for entry in self._read_all_meta():
+        """Find quarantine entry by ID. Supports partial/prefix matching."""
+        qid = qid.strip().lower()
+        entries = self._read_all_meta()
+        # Exact match first
+        for entry in entries:
             if entry.get("quarantine_id") == qid:
                 return entry
+        # Prefix match (for truncated IDs from UI)
+        matches = [e for e in entries if e.get("quarantine_id", "").startswith(qid)]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            logger.warning(f"Ambiguous quarantine ID '{qid}' — {len(matches)} matches. Use more characters.")
+            return matches[0]  # Return first match
         return None
 
     def _update_meta(self, qid: str, updated: Dict):
