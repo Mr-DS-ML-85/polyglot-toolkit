@@ -103,6 +103,28 @@ def _build_default_rules() -> List[YaraRule]:
         condition_fn=lambda d: b"MZ" in d and d.lower().find(b"<html") < d.find(b"MZ"),
     ))
     rules.append(YaraRule(
+        name="PE_In_Any_Media", severity="critical",
+        description="PE executable embedded in image/media file",
+        patterns=[b"MZ"],
+        condition_fn=lambda d: (
+            d[:2] != b"MZ" and  # Not itself a PE file
+            b"MZ" in d[20:] and  # PE header found after initial header
+            d[:4] not in (b"\x7fELF", b"%PDF") and  # Not ELF or PDF
+            d[:8] != b"PK\x03\x04"  # Not ZIP
+        ),
+    ))
+    rules.append(YaraRule(
+        name="ELF_In_Any_Media", severity="critical",
+        description="ELF binary embedded in image/media file",
+        patterns=[b"\x7fELF"],
+        condition_fn=lambda d: (
+            d[:4] != b"\x7fELF" and  # Not itself an ELF
+            b"\x7fELF" in d[20:] and  # ELF header found after initial header
+            d[:4] != b"%PDF" and  # Not PDF
+            d[:8] != b"PK\x03\x04"  # Not ZIP
+        ),
+    ))
+    rules.append(YaraRule(
         name="PDF_In_HTML", severity="critical",
         description="PDF embedded in HTML (data-URI polyglot)",
         patterns=[b"<html"],
