@@ -2253,6 +2253,11 @@ class PolyglotDetector:
             for exe_name, exe_sig in EXE_OVERLAY_SIGS.items():
                 exe_off = trailing.find(exe_sig)
                 if exe_off != -1:
+                    # VALIDATE the signature — don't match random bytes
+                    if exe_name == 'PE/EXE' and not self._validate_pe(trailing, exe_off):
+                        continue
+                    if exe_name == 'ELF' and not self._validate_elf(trailing, exe_off):
+                        continue
                     findings.append({'type':'OVERLAY_POLYGLOT',
                         'detail':f'{ct}+{exe_name} overlay: image at 0x0, {exe_name} @ 0x{trailing_start+exe_off:X} ({len(trailing)-exe_off:,} bytes)',
                         'severity':'critical','offset':trailing_start+exe_off})

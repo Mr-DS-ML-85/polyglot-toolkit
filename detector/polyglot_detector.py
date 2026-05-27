@@ -211,14 +211,14 @@ def scan_file(filepath: str, verbose: bool = False) -> list:
                         f'This is {trailing_ratio*100:.1f}% of total file size.'
                     ))
 
-                    # Check what the trailing data contains
-                    if trailing_data[:2] == b'MZ':
+                    # Check what the trailing data contains — VALIDATE, don't just match 2 bytes
+                    if trailing_data[:2] == b'MZ' and _validate_pe_at(trailing_data, 0):
                         detections.append(Detection(
                             'CRITICAL', 'HIDDEN_PE_EXE',
                             f'PE executable (MZ header) found at byte {after_marker_pos:,}! '
                             f'This file is a polyglot — valid {fmt["name"]} that also contains a Windows executable.'
                         ))
-                    elif trailing_data[:4] == b'\x7fELF':
+                    elif trailing_data[:4] == b'\x7fELF' and _validate_elf_at(trailing_data, 0):
                         detections.append(Detection(
                             'CRITICAL', 'HIDDEN_ELF_EXE',
                             f'ELF executable found at byte {after_marker_pos:,}!'

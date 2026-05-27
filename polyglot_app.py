@@ -228,10 +228,48 @@ class PolyglotDetector:
     SIGS={'PE/EXE':b'MZ','ELF':b'\x7fELF','PDF':b'%PDF','ZIP':b'PK',
           'RAR':b'Rar!','7Z':b'7z','GZIP':b'\x1f\x8b','BAT':b'@echo',
           'PS1':b'powershell','SH':b'#!/bin/','CLASS':b'\xca\xfe\xba\xbe',
-          'MACHO':b'\xfe\xed\xfa','LNK':b'\x4c\x00\x00\x00','VBS':b'CreateObject',
+          'MACHO':b'\xfe\xed\xfa','VBS':b'CreateObject',
           'HTA':b'<hta:','SCRIPT':b'<script','CMD':b'cmd.exe',
           'PYTHON':b'#!/usr/bin/env python','APPLESCRIPT':b'osascript',
           'WSF':b'<job','HTA2':b'<HTA:'}
+
+    # Extensions that naturally contain script/PE patterns — skip sig scanning
+    SAFE_EXT = {'.py','.js','.ts','.jsx','.tsx','.html','.htm','.xhtml',
+                '.php','.asp','.aspx','.jsp','.vue','.svelte','.rb','.pl',
+                '.sh','.bash','.zsh','.ps1','.bat','.cmd','.vbs','.lua',
+                '.md','.txt','.rst','.csv','.json','.xml','.yaml','.yml',
+                '.toml','.ini','.cfg','.conf','.log','.sql',
+                '.java','.c','.cpp','.h','.hpp','.cs','.go','.rs','.swift',
+                # ML models, compiled, databases, fonts
+                '.cbm','.onnx','.bin','.model','.pkl','.pt','.pth','.gguf',
+                '.h5','.pb','.tflite','.safetensors','.joblib',
+                '.so','.dll','.dylib','.a','.lib','.o','.obj',
+                '.db','.sqlite','.sqlite3','.ttf','.otf','.woff','.woff2',
+                '.pyc','.pyo','.class','.wasm'}
+
+    @staticmethod
+    def _validate_pe(data, pos):
+        """Check if MZ at pos is a real PE header."""
+        import struct as _st
+        try:
+            if pos + 64 > len(data): return False
+            e_lfanew = _st.unpack_from('<I', data, pos + 60)[0]
+            pe_pos = pos + e_lfanew
+            if pe_pos + 4 > len(data): return False
+            return data[pe_pos:pe_pos+4] == b'PE\x00\x00'
+        except: return False
+
+    @staticmethod
+    def _validate_elf(data, pos):
+        """Check if ELF magic at pos has valid header."""
+        import struct as _st
+        try:
+            if pos + 20 > len(data): return False
+            if data[pos+4] not in (1, 2): return False
+            if data[pos+5] not in (1, 2): return False
+            elf_type = _st.unpack_from('<H' if data[pos+5]==1 else '>H', data, pos+16)[0]
+            return elf_type in (1, 2, 3, 4)
+        except: return False
 
     def scan_file(self, fp):
         findings=[]
@@ -252,17 +290,29 @@ class PolyglotDetector:
              '.pdf':'PDF','.zip':'ZIP','.mp4':'MP4'}.get(ext)
         if exp and ct and exp!=ct:
             findings.append({'type':'EXT_MISMATCH','detail':f'Ext={exp}, Content={ct}','severity':'critical','offset':0})
-        for nm,sig in self.SIGS.items():
-            off=data.find(sig,64)
-            if off!=-1:
-                findings.append({'type':'HIDDEN_SIG','detail':f'{nm} @ 0x{off:X}',
-                    'severity':'critical' if nm in ('PE/EXE','ELF','LNK',
-                    'SCRIPT','HTA','HTA2','VBS','PYTHON','APPLESCRIPT','WSF') else 'warning','offset':off})
+
+        # Only scan for sigs if not a safe extension
+        if ext not in self.SAFE_EXT:
+            for nm,sig in self.SIGS.items():
+                off=data.find(sig,64)
+                if off!=-1:
+                    # VALIDATE — don't match random bytes
+                    if sig == b'MZ' and not self._validate_pe(data, off):
+                        continue
+                    if sig == b'\x7fELF' and not self._validate_elf(data, off):
+                        continue
+                    sev = 'critical' if nm in ('PE/EXE','ELF',
+                        'SCRIPT','HTA','HTA2','VBS','PYTHON','APPLESCRIPT','WSF') else 'warning'
+                    findings.append({'type':'HIDDEN_SIG','detail':f'{nm} @ 0x{off:X}',
+                        'severity':sev,'offset':off})
+
         mkrs={'JPEG':(b'\xff\xd9',2),'PNG':(b'IEND',8),'GIF':(b'\x3b',1),'PDF':(b'%%EOF',5)}
         if ct in mkrs:
             m,ex=mkrs[ct]; pos=data.rfind(m)
             if pos!=-1 and pos+ex<len(data):
-                findings.append({'type':'TRAILING','detail':f'{len(data)-pos-ex:,} bytes after {ct} end','severity':'critical','offset':pos+ex})
+                t = len(data)-pos-ex
+                if t > 64:  # Ignore small trailing data (metadata, padding)
+                    findings.append({'type':'TRAILING','detail':f'{t:,} bytes after {ct} end','severity':'critical','offset':pos+ex})
         ss=max(len(data)//8,1)
         for i in range(8):
             s=data[i*ss:(i+1)*ss]
@@ -271,7 +321,9 @@ class PolyglotDetector:
                 p=c/c.sum(); p=p[p>0]; ent=float(-np.sum(p*np.log2(p)))
                 if ent>7.5: findings.append({'type':'HIGH_ENT','detail':f'Sec {i+1}/8: {ent:.2f}','severity':'info','offset':i*ss})
         if data[:4]==b'%PDF' and data.find(b'MZ',100)!=-1:
-            findings.append({'type':'MIME_CONF','detail':'PDF+PE','severity':'critical','offset':data.find(b'MZ',100)})
+            mz_off = data.find(b'MZ',100)
+            if self._validate_pe(data, mz_off):
+                findings.append({'type':'MIME_CONF','detail':'PDF+PE','severity':'critical','offset':mz_off})
         return findings
 
 
@@ -538,7 +590,8 @@ class PolyglotApp(QMainWindow):
 
 
         # Global file path — upload once, use in all panels
-        self.global_file = None
+        self.current_file = None
+        self.threat_log = []  # Real-time threat log for monitoring panel
         self._apply_theme()
         self._build_ui()
 
@@ -608,30 +661,7 @@ class PolyglotApp(QMainWindow):
         ]
         for pg in pages:
             self.stack.addWidget(pg)
-
-        # Global file selector bar — visible on all panels
-        content_widget = QWidget()
-        content_layout = QVBoxLayout(content_widget)
-        content_layout.setContentsMargins(0,0,0,0)
-        content_layout.setSpacing(0)
-
-        file_bar = QFrame()
-        file_bar.setStyleSheet(f"background:{T.BG2};border-bottom:1px solid {T.BORDER};padding:6px 12px")
-        file_bar.setFixedHeight(48)
-        fbl = QHBoxLayout(file_bar); fbl.setContentsMargins(10,0,10,0)
-        fbl.addWidget(QLabel("📁 File:"))
-        self.global_file_label = QLabel("No file selected")
-        self.global_file_label.setStyleSheet(f"color:{T.DIM};font-size:12px")
-        fbl.addWidget(self.global_file_label, 1)
-        gf_btn = btn("Browse File", T.BLUE)
-        gf_btn.clicked.connect(self._browse_global_file)
-        fbl.addWidget(gf_btn)
-        gf_clear = btn("Clear", T.DIM)
-        gf_clear.clicked.connect(self._clear_global_file)
-        fbl.addWidget(gf_clear)
-        content_layout.addWidget(file_bar)
-        content_layout.addWidget(self.stack)
-        ml.addWidget(content_widget)
+        ml.addWidget(self.stack, 1)  # stretch=1 fills remaining space
 
     def _nav_s(self, active):
         if active:
@@ -661,6 +691,11 @@ class PolyglotApp(QMainWindow):
         for c in [self.d_scanned,self.d_threats,self.d_sanitized,self.d_built]: sr.addWidget(c)
         l.addLayout(sr)
 
+        # Current file indicator
+        self.d_file_label = QLabel("📁 No file selected — browse from any section")
+        self.d_file_label.setStyleSheet(f"color:{T.DIM};font-size:12px;padding:4px 8px;")
+        l.addWidget(self.d_file_label)
+
         bl = QHBoxLayout(); bl.setSpacing(15)
         ac, al = card("Recent Alerts","🔔"); self.d_alerts = log_box(); self.d_alerts.setMaximumHeight(300); al.addWidget(self.d_alerts); bl.addWidget(ac,2)
 
@@ -683,7 +718,7 @@ class PolyglotApp(QMainWindow):
         ic, il = card("Input Files","📁")
         r = QHBoxLayout(); r.addWidget(QLabel("Cover:")); self.b_cover = inp("JPEG/PNG/GIF/PDF/ZIP/MP4/XLSX/DOCX..."); r.addWidget(self.b_cover,1)
         b=btn("Browse",T.DIM); b.clicked.connect(lambda:self._browse(self.b_cover)); r.addWidget(b)
-        bg=btn("📌 Global",T.DIM); bg.clicked.connect(lambda: self.b_cover.setText(self.global_file) if self.global_file else QMessageBox.information(self,"No File","Browse a file using the top bar first.")); r.addWidget(bg)
+        bg=btn("📌 Shared",T.DIM); bg.clicked.connect(lambda: self.b_cover.setText(self.current_file) if self.current_file else QMessageBox.information(self,"No File","Select a file using any Browse button first.")); r.addWidget(bg)
         il.addLayout(r)
         r = QHBoxLayout(); r.addWidget(QLabel("Payload:")); self.b_payload = inp("EXE/ELF/Mach-O/BAT/VBS/script..."); r.addWidget(self.b_payload,1)
         b=btn("Browse",T.DIM); b.clicked.connect(lambda:self._browse(self.b_payload)); r.addWidget(b); il.addLayout(r)
@@ -1443,6 +1478,24 @@ class PolyglotApp(QMainWindow):
         alll.addWidget(alert_btn)
         tabs.addTab(al, "Alerts")
 
+        # Real-Time Threats — multi-file threat table
+        tt = QWidget(); ttl = QVBoxLayout(tt)
+        self.mon_threats_tree = QTreeWidget()
+        self.mon_threats_tree.setHeaderLabels(["Time","File","Severity","Type","Details","YARA Rules"])
+        self.mon_threats_tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.mon_threats_tree.setStyleSheet(f"QTreeWidget{{background:{T.BG};border:1px solid {T.BORDER};border-radius:8px;font-size:11px}}")
+        ttl.addWidget(self.mon_threats_tree, 1)
+        threat_btn_row = QHBoxLayout()
+        refresh_threats_btn = btn("🔄 Refresh Threats", T.RED)
+        refresh_threats_btn.clicked.connect(self._refresh_threats_tab)
+        threat_btn_row.addWidget(refresh_threats_btn)
+        clear_threats_btn = btn("🗑 Clear", T.DIM)
+        clear_threats_btn.clicked.connect(lambda: self.mon_threats_tree.clear() if hasattr(self, 'mon_threats_tree') else None)
+        threat_btn_row.addWidget(clear_threats_btn)
+        threat_btn_row.addStretch()
+        ttl.addLayout(threat_btn_row)
+        tabs.addTab(tt, "⚠ Threats")
+
         # File Changes — uses monitor worker if active
         fc = QWidget(); fcl = QVBoxLayout(fc)
         self.mon_changes = log_box(); fcl.addWidget(self.mon_changes, 1)
@@ -1468,6 +1521,50 @@ class PolyglotApp(QMainWindow):
         except RuntimeError: pass
         try: self._refresh_monitor_metrics()
         except RuntimeError: pass
+        try: self._refresh_threats_tab()
+        except RuntimeError: pass
+
+    def _refresh_threats_tab(self):
+        """Refresh the real-time threats table from threat_log + audit log."""
+        if not hasattr(self, 'mon_threats_tree'): return
+        try: self.mon_threats_tree.clear()
+        except RuntimeError: return
+        sev_colors = {'critical':T.RED,'high':T.ORANGE,'warning':T.YELLOW,'clean':T.GREEN}
+        # Show threats from in-memory threat_log (real-time)
+        for r in self.threat_log[-200:]:  # Last 200 threats
+            try:
+                ts = r.get('time', r.get('timestamp', ''))[:19]
+                fname = r.get('file', r.get('path', '?'))
+                sev = r.get('severity', 'warning').upper()
+                mtype = r.get('ml_label', r.get('type', '—'))
+                details = r.get('detail', '')
+                if not details and r.get('details'):
+                    details = '; '.join(f.get('detail','') for f in r['details'][:3])
+                yara = ', '.join(r.get('yara_rules', [])[:3])
+                item = QTreeWidgetItem([ts, fname, sev, mtype, details, yara])
+                color = sev_colors.get(r.get('severity',''), T.FG)
+                for i in range(6): item.setForeground(i, QColor(color))
+                self.mon_threats_tree.addTopLevelItem(item)
+            except Exception: pass
+        # Also load from audit log file
+        audit_path = os.path.expanduser("~/.polyglot/audit.jsonl")
+        if os.path.isfile(audit_path):
+            try:
+                import json as _json
+                with open(audit_path) as f:
+                    for line in f:
+                        try:
+                            e = _json.loads(line.strip())
+                            item = QTreeWidgetItem([
+                                e.get('time','')[:19], e.get('file',''),
+                                e.get('severity','').upper(), e.get('type',''),
+                                e.get('detail',''), e.get('source','')
+                            ])
+                            color = sev_colors.get(e.get('severity',''), T.FG)
+                            for i in range(6): item.setForeground(i, QColor(color))
+                            self.mon_threats_tree.addTopLevelItem(item)
+                        except: pass
+            except: pass
 
     def _refresh_monitor_logs(self):
         if not hasattr(self, 'mon_live_log'): return
@@ -2312,7 +2409,7 @@ class PolyglotApp(QMainWindow):
         self.ioc_file = inp("File to extract IOCs from...")
         r.addWidget(self.ioc_file, 1)
         bb = btn("Browse", T.DIM); bb.clicked.connect(lambda: self._browse(self.ioc_file)); r.addWidget(bb)
-        gb = btn("📌 Global", T.DIM); gb.clicked.connect(lambda: self.ioc_file.setText(self.global_file) if self.global_file else None); r.addWidget(gb)
+        gb = btn("📌 Shared", T.DIM); gb.clicked.connect(lambda: self.ioc_file.setText(self.current_file) if self.current_file else None); r.addWidget(gb)
         eb = btn("🔍 Extract IOCs", T.BLUE); eb.clicked.connect(self._do_ioc_extract); r.addWidget(eb)
         l.addLayout(r)
 
@@ -2728,46 +2825,59 @@ class PolyglotApp(QMainWindow):
             if severity == "critical" or not hasattr(self, 'n_critical') or not self.n_critical.isChecked():
                 Notifier.send(title, msg, severity)
 
+    def _set_shared_file(self, path):
+        """Set a file in one section → auto-populate in ALL sections."""
+        if not path or not os.path.exists(path): return
+        self.current_file = path
+        name = os.path.basename(path)
+        sz = os.path.getsize(path)
+        self._log(f"📁 File selected: {name} ({sz:,} bytes)", "info")
+        # Auto-populate all file entries that exist
+        for attr in ('s_path', 'da_target', 'hex_file'):
+            w = getattr(self, attr, None)
+            if w and isinstance(w, QLineEdit) and not w.text().strip():
+                w.setText(path)
+        # Update dashboard file label
+        if hasattr(self, 'd_file_label'):
+            self.d_file_label.setText(f"📁 {name} ({sz:,} bytes)")
+            self.d_file_label.setStyleSheet(f"color:{T.GREEN};font-size:12px")
+
     def _browse_global_file(self):
+        """Legacy — redirect to shared file."""
         p, _ = QFileDialog.getOpenFileName(self, "Select File")
-        if p:
-            self.global_file = p
-            sz = os.path.getsize(p)
-            name = os.path.basename(p)
-            self.global_file_label.setText(f"{name} ({sz:,} bytes)")
-            self.global_file_label.setStyleSheet(f"color:{T.GREEN};font-size:12px")
-            self._log(f"Global file set: {name}", "info")
+        if p: self._set_shared_file(p)
 
     def _clear_global_file(self):
-        self.global_file = None
-        self.global_file_label.setText("No file selected")
-        self.global_file_label.setStyleSheet(f"color:{T.DIM};font-size:12px")
+        self.current_file = None
 
     def _use_global_in_scanner(self):
-        if self.global_file:
-            self.s_path.setText(self.global_file)
+        if self.current_file:
+            self.s_path.setText(self.current_file)
         else:
-            QMessageBox.information(self, "No File", "Browse a file using the top bar first.")
+            QMessageBox.information(self, "No File", "Select a file using any Browse button first.")
 
     def _use_global_in_analysis(self):
-        if self.global_file:
-            self.da_target.setText(self.global_file)
+        if self.current_file:
+            self.da_target.setText(self.current_file)
         else:
-            QMessageBox.information(self, "No File", "Browse a file using the top bar first.")
+            QMessageBox.information(self, "No File", "Select a file using any Browse button first.")
 
     def _use_global_in_hex(self):
-        if self.global_file:
-            self.hex_file.setText(self.global_file)
+        if self.current_file:
+            self.hex_file.setText(self.current_file)
         else:
-            QMessageBox.information(self, "No File", "Browse a file using the top bar first.")
+            QMessageBox.information(self, "No File", "Select a file using any Browse button first.")
 
     def _browse(self, entry):
         p,_ = QFileDialog.getOpenFileName(self,"Select File")
-        if p: entry.setText(p)
+        if p:
+            entry.setText(p)
+            self._set_shared_file(p)
 
     def _browse_dir(self, entry):
         p = QFileDialog.getExistingDirectory(self,"Select Directory")
-        if p: entry.setText(p)
+        if p:
+            entry.setText(p)
 
     def _log(self, text, tag=None):
         colors = {'critical':T.RED,'high':T.ORANGE,'warning':T.YELLOW,'info':T.BLUE,
@@ -2842,15 +2952,32 @@ class PolyglotApp(QMainWindow):
                                         str(r['yara_count']),
                                         str(r['findings']), ', '.join(r.get('yara_rules',[])[:3])])
             else:
-                details = '; '.join(f['detail'] for f in r.get('details',[])[:3])
+                details = '; '.join(f.get('detail','') for f in r.get('details',[])[:3])
                 item = QTreeWidgetItem([r['file'], r['severity'].upper(), '—', '—', '—', '—',
                                         str(r.get('findings',0)), details])
             color = sev_colors.get(r['severity'], T.FG)
             for i in range(8): item.setForeground(i, QColor(color))
             self.s_tree.addTopLevelItem(item)
-            self.counts['scanned'] += 1; self.d_scanned._val.setText(str(self.counts['scanned']))
-        except RuntimeError:
-            pass  # Widget deleted
+            self.counts['scanned'] += 1
+            if hasattr(self, 'd_scanned'): self.d_scanned._val.setText(str(self.counts['scanned']))
+            # Feed to monitoring panel if threat
+            if r['severity'] in ('critical', 'high', 'warning'):
+                from datetime import datetime as _dt
+                r['time'] = _dt.now().strftime('%Y-%m-%d %H:%M:%S')
+                self.threat_log.append(r)
+                # Live-update threats tree if it exists
+                if hasattr(self, 'mon_threats_tree'):
+                    try:
+                        sev_c = {'critical':T.RED,'high':T.ORANGE,'warning':T.YELLOW}
+                        ti = QTreeWidgetItem([r['time'], r['file'], r['severity'].upper(),
+                                              r.get('ml_label', r.get('type','—')),
+                                              r.get('detail', '; '.join(f.get('detail','') for f in r.get('details',[])[:3])),
+                                              ', '.join(r.get('yara_rules',[])[:3])])
+                        for i2 in range(6): ti.setForeground(i2, QColor(sev_c.get(r['severity'], T.FG)))
+                        self.mon_threats_tree.addTopLevelItem(ti)
+                    except Exception: pass
+        except Exception as e:
+            import sys; print(f"[GUI SCAN ERROR] {e}", file=sys.stderr)
 
     def _on_scan_done(self, stats):
         try:
@@ -2925,6 +3052,18 @@ class PolyglotApp(QMainWindow):
             self.counts['threats'] += 1
             if hasattr(self, 'd_threats'):
                 self.d_threats._val.setText(str(self.counts['threats']))
+            # Feed to threat_log + live threats tree
+            a.setdefault('severity', 'warning')
+            self.threat_log.append(a)
+            if hasattr(self, 'mon_threats_tree'):
+                try:
+                    sev_c = {'critical':T.RED,'high':T.ORANGE,'warning':T.YELLOW}
+                    ti = QTreeWidgetItem([a.get('time',''), a.get('file',''),
+                                          a.get('severity','').upper(), a.get('type','—'),
+                                          a.get('detail',''), ''])
+                    for i in range(6): ti.setForeground(i, QColor(sev_c.get(a.get('severity',''), T.FG)))
+                    self.mon_threats_tree.addTopLevelItem(ti)
+                except Exception: pass
             # Auto-quarantine monitored threats
             if a.get('path') and a.get('findings') and hasattr(self, 'q_manager'):
                 scan_result = self._findings_to_scan_result(a['path'], a['findings'])
@@ -2975,21 +3114,27 @@ class PolyglotApp(QMainWindow):
     # ── Quarantine Actions ───────────────────────────────────
 
     def _refresh_quarantine(self):
-        self.q_tree.clear()
-        entries = self.q_manager.list_quarantined()
-        sev_colors = {'CRITICAL':T.RED,'HIGH':T.ORANGE,'MEDIUM':T.YELLOW,'LOW':T.DIM,'SAFE':T.GREEN}
-        for m in entries:
-            status = "Restored" if m.get('restored') else "Quarantined"
-            item = QTreeWidgetItem([m.get('quarantine_id','?')[:8], m.get('original_name','?'),
-                                    m.get('risk_level','?'), f"{m.get('confidence',0):.2f}",
-                                    m.get('timestamp','?')[:19], status])
-            color = sev_colors.get(m.get('risk_level',''), T.FG)
-            for i in range(6): item.setForeground(i, QColor(color))
-            self.q_tree.addTopLevelItem(item)
+        try:
+            self.q_tree.clear()
+            entries = self.q_manager.list_quarantined()
+            sev_colors = {'CRITICAL':T.RED,'HIGH':T.ORANGE,'MEDIUM':T.YELLOW,'LOW':T.DIM,'SAFE':T.GREEN}
+            for m in entries:
+                status = "Restored" if m.get('restored') else "Quarantined"
+                item = QTreeWidgetItem([m.get('quarantine_id','?')[:8], m.get('original_name','?'),
+                                        m.get('risk_level','?'), f"{m.get('confidence',0):.2f}",
+                                        m.get('timestamp','?')[:19], status])
+                color = sev_colors.get(m.get('risk_level',''), T.FG)
+                for i in range(6): item.setForeground(i, QColor(color))
+                self.q_tree.addTopLevelItem(item)
+        except Exception as e:
+            self._log(f"Quarantine refresh error: {e}", "critical")
 
     def _purge_quarantine(self):
-        purged = self.q_manager.auto_purge_expired()
-        self._log(f"Purged {purged} expired entries","info")
+        try:
+            purged = self.q_manager.auto_purge_expired()
+            self._log(f"Purged {purged} expired entries","info")
+        except Exception as e:
+            self._log(f"Purge error: {e}", "critical")
         self._refresh_quarantine()
 
     def _restore_quarantine(self):
@@ -3015,7 +3160,7 @@ class PolyglotApp(QMainWindow):
                 self._log(f"Deleted: {qid}","warning")
             else:
                 self._log("Delete failed — not found","critical")
-        self._refresh_quarantine()
+            self._refresh_quarantine()
 
     # ── YARA / Logs / Settings ───────────────────────────────
 

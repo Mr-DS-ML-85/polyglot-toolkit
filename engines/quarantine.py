@@ -161,6 +161,8 @@ class QuarantineManager:
         entries = self._read_all_meta()
         if not include_restored:
             entries = [e for e in entries if not e.get("restored")]
+        # Always filter out deleted entries
+        entries = [e for e in entries if not e.get("deleted")]
         return sorted(entries, key=lambda e: e.get("timestamp", ""), reverse=True)
 
     def delete(self, qid: str) -> bool:
