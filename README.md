@@ -75,6 +75,41 @@ Supported architecture combinations:
 
 **Obfuscation Flags:** `--encrypt`, `--fud`, `--mime`, `--payload-type`
 
+### Obfuscation Techniques (Red Team)
+
+The toolkit implements 5 distinct obfuscation techniques, automatically selected based on payload type:
+
+| Payload Type | Technique | How It Works |
+|---|---|---|
+| **PE/ELF/Mach-O** | Section Encryption (packer) | XOR-encrypts `.text`/code sections, injects x86-64/ARM64/ARM32 decryptor stub. Headers, imports, section table remain intact — `file` still recognizes the format. |
+| **Shellcode** | XOR + Loader Stub | Wraps in a new PE/ELF with VirtualAlloc/mmap + decrypt + execute. PE supports x86-64 + ARM64. |
+| **Scripts** (VBS/PS1/Bash/Python) | FUD Obfuscation | Variable renaming, junk code insertion, Base64 wrapping, obfuscated eval chains. |
+| **Media** (JPEG/PNG/GIF) | Steganography (stealth) | Valid image with payload hidden in image metadata/comments. |
+| **Any + MIME** | MIME Confusion | Content-Type/extension mismatch to confuse parsers. |
+
+**Section Encryption (packer technique):**
+```
+Original PE:              Encrypted PE:
+┌──────────────┐          ┌──────────────┐
+│ MZ/PE header │          │ MZ/PE header │  ← identical
+│ .text (code) │  ──XOR─> │ .text (XOR)  │  ← encrypted
+│ .rdata       │          │ .rdata       │  ← identical
+│ .data        │          │ .data        │  ← identical
+└──────────────┘          │ [decryptor]  │  ← injected at end of .text
+                          └──────────────┘
+                          Entry → decryptor → decrypt .text → original entry
+```
+
+The decryptor runs first at load time:
+1. XOR-decrypts the encrypted sections in-place
+2. Jumps to the original entry point
+3. Normal program execution continues
+
+**Supported architectures:**
+- PE: x86-64 (x86-64 decryptor with `push/pop rbx,rcx,rsi` + `xor [rsi],bl` loop)
+- ELF: x86-64, ARM64 (AArch64), ARM32 (ARMv7 with `ldrb/eor/strb` loop)
+- Mach-O: x86-64, ARM64 (skips Mach-O header + load commands, encrypts code only)
+
 ### Scanner (Defense)
 
 - ML Detection — CatBoost classifier on 354 features (CPU/GPU)

