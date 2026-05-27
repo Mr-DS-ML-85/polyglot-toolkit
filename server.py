@@ -224,17 +224,36 @@ def api_sanitize():
 
 @app.route('/api/build', methods=['POST'])
 def api_build():
-    """Build a polyglot file."""
-    data = request.get_json() or {}
-    cover = data.get('cover', '')
-    payload = data.get('payload', '')
-    container = data.get('container', data.get('container_type', 'jpeg'))
-    payload_type = data.get('payload_type', None)
-    target_os = data.get('target_os', 'windows')
-    encrypt = data.get('encrypt', False)
-    fud = data.get('fud', False)
-    mime = data.get('mime', False)
-    output = data.get('output', f'polyglot.{container}')
+    """Build a polyglot file. Supports both JSON and FormData."""
+    # Handle FormData (file uploads from dashboard)
+    if request.content_type and 'multipart' in request.content_type:
+        cover_file = request.files.get('cover')
+        payload_file = request.files.get('payload')
+        if not cover_file or not payload_file:
+            return jsonify({'error': 'Cover and payload files required'}), 400
+        cover_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_{cover_file.filename}')
+        cover_file.save(cover_tmp.name); cover_tmp.close()
+        payload_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f'_{payload_file.filename}')
+        payload_file.save(payload_tmp.name); payload_tmp.close()
+        cover, payload = cover_tmp.name, payload_tmp.name
+        container = request.form.get('container_type', 'jpeg')
+        payload_type = request.form.get('payload_type', '') or None
+        target_os = request.form.get('target_os', 'windows')
+        encrypt = request.form.get('encrypt', 'false') == 'true'
+        fud = request.form.get('fud', 'false') == 'true'
+        mime = request.form.get('mime', 'false') == 'true'
+        output = f'polyglot_output.{container}'
+    else:
+        data = request.get_json() or {}
+        cover = data.get('cover', '')
+        payload = data.get('payload', '')
+        container = data.get('container', data.get('container_type', 'jpeg'))
+        payload_type = data.get('payload_type', None)
+        target_os = data.get('target_os', 'windows')
+        encrypt = data.get('encrypt', False)
+        fud = data.get('fud', False)
+        mime = data.get('mime', False)
+        output = data.get('output', f'polyglot.{container}')
 
     if not cover or not os.path.isfile(cover):
         return jsonify({'error': 'Invalid cover file'}), 400
@@ -297,6 +316,53 @@ def api_stats():
 def api_alerts():
     """Recent alerts."""
     return jsonify({'alerts': list(state.alerts)[:50]})
+
+@app.route('/api/train', methods=['POST'])
+def api_train():
+    """Train the ML model."""
+    data = request.get_json() or {}
+    n_samples = data.get('samples', 50)
+    use_gpu = data.get('use_gpu', True)
+
+    try:
+        import subprocess as sp
+        device_flag = '--gpu' if use_gpu else '--cpu'
+        cmd = [sys.executable, 'train_model.py', '--samples', str(n_samples), device_flag]
+        result = sp.run(cmd, capture_output=True, text=True, timeout=600,
+                       cwd=os.path.dirname(os.path.abspath(__file__)))
+        # Parse output for accuracy
+        output = result.stdout + result.stderr
+        accuracy = None
+        benign_recall = None
+        malicious_recall = None
+        for line in output.split('\n'):
+            if 'Accuracy' in line and '%' in line:
+                try: accuracy = float(line.split('%')[0].split()[-1])
+                except: pass
+            if 'Benign recall' in line and '%' in line:
+                try: benign_recall = float(line.split('%')[0].split()[-1])
+                except: pass
+            if 'Malicious recall' in line and '%' in line:
+                try: malicious_recall = float(line.split('%')[0].split()[-1])
+                except: pass
+        # Reload model
+        try:
+            model_path = os.path.join('models', 'polyglot_shield.cbm')
+            if os.path.exists(model_path):
+                state.model.load(model_path)
+        except: pass
+        return jsonify({
+            'status': 'success',
+            'accuracy': accuracy,
+            'benign_recall': benign_recall,
+            'malicious_recall': malicious_recall,
+            'train_samples': n_samples * 87,  # 87 types
+            'output': output[-2000:],
+        })
+    except sp.TimeoutExpired:
+        return jsonify({'error': 'Training timed out (10min limit)'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/monitor/start', methods=['POST'])
 def api_monitor_start():
@@ -426,8 +492,58 @@ hr{border-color:#1e2d3d;margin:12px 0}
     </div>
 
     <div class="card">
-      <h3>&#128276; Recent Alerts</h3>
-      <div id="alerts" style="max-height:600px;overflow-y:auto"><div class="alert warning">No alerts yet</div></div>
+      <h3>&#128295; Polyglot Builder</h3>
+      <label class="chk" style="font-size:11px;color:#556677">Cover file (image/document)</label>
+      <input type="file" id="build-cover">
+      <label class="chk" style="font-size:11px;color:#556677">Payload file</label>
+      <input type="file" id="build-payload">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0">
+        <select id="build-container" style="background:#0d1520;color:#c5d0db;border:1px solid #1e2d3d;border-radius:6px;padding:8px;font-size:12px">
+          <option value="jpeg">JPEG</option><option value="png">PNG</option><option value="gif">GIF</option>
+          <option value="pdf">PDF</option><option value="zip">ZIP</option><option value="mp4">MP4</option>
+          <option value="xlsx">XLSX</option><option value="docx">DOCX</option>
+        </select>
+        <select id="build-payload-type" style="background:#0d1520;color:#c5d0db;border:1px solid #1e2d3d;border-radius:6px;padding:8px;font-size:12px">
+          <option value="">exe (raw)</option>
+          <option value="bash">bash (Linux/macOS)</option><option value="sh">sh (POSIX)</option>
+          <option value="python">python (All OS)</option><option value="applescript">AppleScript (macOS)</option>
+          <option value="vbs">VBS (Windows)</option><option value="ps1">PS1 (Windows)</option>
+          <option value="xlsx">Excel Macro</option><option value="docx">Word Macro</option>
+        </select>
+      </div>
+      <select id="build-target-os" style="background:#0d1520;color:#c5d0db;border:1px solid #1e2d3d;border-radius:6px;padding:8px;font-size:12px;width:100%;margin:4px 0">
+        <option value="windows">Target: Windows</option><option value="linux">Target: Linux</option>
+        <option value="macos">Target: macOS</option><option value="all">Target: All (3 variants)</option>
+      </select>
+      <div style="display:flex;gap:6px;margin:6px 0">
+        <label class="chk"><input type="checkbox" id="build-encrypt"> Encrypt</label>
+        <label class="chk"><input type="checkbox" id="build-fud"> FUD</label>
+        <label class="chk"><input type="checkbox" id="build-mime"> MIME</label>
+      </div>
+      <button class="btn orange" onclick="buildPolyglot()" id="btn-build">&#9889; BUILD POLYGLOT</button>
+
+      <hr>
+      <h3>&#129504; ML Training</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0">
+        <div>
+          <label class="chk" style="font-size:11px;color:#556677">Samples per type</label>
+          <input type="number" id="train-samples" value="50" min="10" max="500" style="background:#0d1520;color:#c5d0db;border:1px solid #1e2d3d;border-radius:6px;padding:8px;font-size:12px;width:100%">
+        </div>
+        <div>
+          <label class="chk" style="font-size:11px;color:#556677">Compute</label>
+          <select id="train-device" style="background:#0d1520;color:#c5d0db;border:1px solid #1e2d3d;border-radius:6px;padding:8px;font-size:12px;width:100%">
+            <option value="GPU">GPU (CUDA)</option><option value="CPU">CPU</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn blue" onclick="trainModel()" id="btn-train">&#129504; TRAIN MODEL</button>
+      <div id="train-status" style="margin-top:6px;font-size:11px;color:#556677"></div>
+
+      <hr>
+      <h3>&#128203; YARA Rules</h3>
+      <div style="overflow-x:auto">
+        <table id="yara-table"><thead><tr><th>Rule</th><th>Severity</th><th>Description</th></tr></thead><tbody></tbody></table>
+      </div>
     </div>
   </div>
 
@@ -447,6 +563,7 @@ hr{border-color:#1e2d3d;margin:12px 0}
 <div class="toast" id="toast"></div>
 
 <script>
+function escHtml(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function showToast(msg,type='info'){
   const t=document.getElementById('toast');
   t.textContent=msg;t.className='toast show '+(type||'');
@@ -482,7 +599,44 @@ async function scanFile(){
   try{
     const fd=new FormData();fd.append('file',f);
     const r=await fetch('/api/scan',{method:'POST',body:fd}).then(r=>r.json());
-    document.getElementById('results').textContent=JSON.stringify(r,null,2);
+    // Build rich result display with ML confidence
+    let html='<div style="margin:8px 0">';
+    html+='<div style="font-size:16px;font-weight:bold;margin-bottom:8px">Scan: '+escHtml(r.filename)+'</div>';
+    // ML Result with confidence bar
+    if(r.ml){
+      const pct=Math.round(r.ml.confidence*100);
+      const risk=Math.round(r.ml.risk_score||0);
+      const color=risk>=80?'#ff3333':risk>=60?'#f0883e':risk>=40?'#ddaa22':'#22cc55';
+      html+='<div style="background:#0d1520;border-radius:8px;padding:12px;margin:8px 0">';
+      html+='<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>ML Prediction: <b style="color:'+color+'">'+escHtml(r.ml.label.toUpperCase())+'</b></span><span>Confidence: <b>'+pct+'%</b></span></div>';
+      html+='<div style="background:#1e2d3d;border-radius:4px;height:20px;overflow:hidden"><div style="background:'+color+';height:100%;width:'+pct+'%;transition:width 0.5s;border-radius:4px"></div></div>';
+      html+='<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:#556677"><span>Risk Score: <b style="color:'+color+'">'+risk+'/100</b></span><span>Risk Level: <b>'+escHtml(r.ml.risk_level||'N/A')+'</b></span></div>';
+      html+='<div style="font-size:11px;color:#556677;margin-top:4px">Polyglot Prob: '+((r.ml.polyglot_probability||0)*100).toFixed(1)+'% | Benign Prob: '+((r.ml.benign_probability||0)*100).toFixed(1)+'%</div>';
+      html+='</div>';
+    } else {
+      html+='<div class="alert warning">ML model not loaded — rule-based detection only</div>';
+    }
+    // YARA matches
+    if(r.yara_matches&&r.yara_matches.length){
+      html+='<div style="margin:8px 0"><b style="color:#3399ff">YARA Rules Matched ('+r.yara_matches.length+')</b></div>';
+      r.yara_matches.forEach(m=>{
+        const sev=m.severity==='critical'?'#ff3333':m.severity==='high'?'#f0883e':'#ddaa22';
+        html+='<div class="alert" style="border-color:'+sev+'"><b>'+escHtml(m.rule)+'</b> ['+escHtml((m.severity||'').toUpperCase())+'] — '+escHtml(m.description||'')+'</div>';
+      });
+    }
+    // Findings
+    if(r.findings&&r.findings.length){
+      html+='<div style="margin:8px 0"><b style="color:#f0883e">Findings ('+r.findings.length+')</b></div>';
+      r.findings.forEach(f2=>{
+        html+='<div class="alert '+((f2.severity==='critical'||f2.severity==='high')?'':'high')+'">'+escHtml(f2.detail||'')+'</div>';
+      });
+    }
+    // Verdict
+    const verdict=r.threat?'THREAT DETECTED':'CLEAN';
+    const vc=r.threat?'#ff3333':'#22cc55';
+    html+='<div style="text-align:center;padding:12px;margin-top:8px;font-size:20px;font-weight:bold;color:'+vc+';border:2px solid '+vc+';border-radius:8px">'+verdict+'</div>';
+    html+='</div>';
+    document.getElementById('results').innerHTML=html;
     showToast(r.threat?'Threat detected!':'File clean',r.threat?'error':'success');
   }catch(e){showToast('Scan failed: '+e.message,'error')}
   finally{setLoading('btn-scan',false);refresh()}
@@ -550,6 +704,63 @@ async function loadYara(){
   }catch(e){}
 }
 refresh();loadYara();setInterval(refresh,5000);
+
+async function buildPolyglot(){
+  const cover=document.getElementById('build-cover').files[0];
+  const payload=document.getElementById('build-payload').files[0];
+  if(!cover||!payload){showToast('Select cover and payload files','error');return}
+  setLoading('btn-build',true);
+  try{
+    const fd=new FormData();
+    fd.append('cover',cover);fd.append('payload',payload);
+    fd.append('container_type',document.getElementById('build-container').value);
+    fd.append('payload_type',document.getElementById('build-payload-type').value);
+    fd.append('target_os',document.getElementById('build-target-os').value);
+    fd.append('encrypt',document.getElementById('build-encrypt').checked);
+    fd.append('fud',document.getElementById('build-fud').checked);
+    fd.append('mime',document.getElementById('build-mime').checked);
+    const r=await fetch('/api/build',{method:'POST',body:fd}).then(r=>r.json());
+    if(r.error){showToast('Build error: '+r.error,'error');return}
+    let html='<div style="margin:8px 0">';
+    html+='<div style="font-size:16px;font-weight:bold;color:#22cc55;margin-bottom:8px">Build Successful</div>';
+    html+='<div style="background:#0d1520;border-radius:8px;padding:12px;font-family:Consolas,monospace;font-size:12px">';
+    html+='<div>Container: <b>'+escHtml(r.container_type)+'</b></div>';
+    if(r.payload_type)html+='<div>Payload Type: <b>'+escHtml(r.payload_type)+'</b></div>';
+    html+='<div>Cover Size: <b>'+Number(r.cover_size).toLocaleString()+'</b> bytes</div>';
+    html+='<div>Payload Size: <b>'+Number(r.payload_size).toLocaleString()+'</b> bytes</div>';
+    html+='<div>Output Size: <b>'+Number(r.output_size).toLocaleString()+'</b> bytes</div>';
+    html+='<div>Offset: <b>0x'+(r.payload_offset||0).toString(16).toUpperCase()+'</b></div>';
+    html+='<div>Entropy: <b>'+r.entropy+'</b></div>';
+    html+='<div>Encrypted: <b>'+(r.encrypted?'Yes':'No')+'</b> | FUD: <b>'+(r.fud_protected?'Yes':'No')+'</b> | MIME: <b>'+(r.mime_confused?'Yes':'No')+'</b></div>';
+    html+='</div></div>';
+    document.getElementById('results').innerHTML=html;
+    showToast('Polyglot built successfully','success');
+  }catch(e){showToast('Build failed: '+e.message,'error')}
+  finally{setLoading('btn-build',false);refresh()}
+}
+
+async function trainModel(){
+  const samples=parseInt(document.getElementById('train-samples').value)||50;
+  const device=document.getElementById('train-device').value;
+  setLoading('btn-train',true);
+  document.getElementById('train-status').innerHTML='<span class="spinner"></span> Training model... This may take a few minutes.';
+  try{
+    const r=await api('train',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({samples:samples,use_gpu:device==='GPU'})});
+    let html='<div style="background:#0d1520;border-radius:8px;padding:12px;font-size:12px;margin-top:8px">';
+    html+='<div style="color:#22cc55;font-weight:bold">Training Complete</div>';
+    if(r.accuracy)html+='<div>Accuracy: <b>'+r.accuracy+'%</b></div>';
+    if(r.benign_recall)html+='<div>Benign Recall: <b>'+r.benign_recall+'%</b></div>';
+    if(r.malicious_recall)html+='<div>Malicious Recall: <b>'+r.malicious_recall+'%</b></div>';
+    if(r.train_samples)html+='<div>Training Samples: <b>'+r.train_samples+'</b></div>';
+    if(r.training_time_sec)html+='<div>Training Time: <b>'+r.training_time_sec+'s</b></div>';
+    html+='</div>';
+    document.getElementById('train-status').innerHTML=html;
+    showToast('Model trained successfully','success');
+    refresh();
+  }catch(e){document.getElementById('train-status').innerHTML='<div class="alert">Training failed: '+escHtml(e.message)+'</div>';showToast('Training failed','error')}
+  finally{setLoading('btn-train',false)}
+}
 </script>
 </body></html>"""
 
