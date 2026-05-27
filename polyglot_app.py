@@ -236,7 +236,9 @@ class PolyglotDetector:
           'RAR':b'Rar!','7Z':b'7z','GZIP':b'\x1f\x8b','BAT':b'@echo',
           'PS1':b'powershell','SH':b'#!/bin/','CLASS':b'\xca\xfe\xba\xbe',
           'MACHO':b'\xfe\xed\xfa','LNK':b'\x4c\x00\x00\x00','VBS':b'CreateObject',
-          'HTA':b'<hta:','SCRIPT':b'<script','CMD':b'cmd.exe'}
+          'HTA':b'<hta:','SCRIPT':b'<script','CMD':b'cmd.exe',
+          'PYTHON':b'#!/usr/bin/env python','APPLESCRIPT':b'osascript',
+          'WSF':b'<job','HTA2':b'<HTA:'}
 
     def scan_file(self, fp):
         findings=[]
@@ -261,7 +263,8 @@ class PolyglotDetector:
             off=data.find(sig,64)
             if off!=-1:
                 findings.append({'type':'HIDDEN_SIG','detail':f'{nm} @ 0x{off:X}',
-                    'severity':'high' if nm in ('PE/EXE','ELF','LNK') else 'warning','offset':off})
+                    'severity':'critical' if nm in ('PE/EXE','ELF','LNK',
+                    'SCRIPT','HTA','HTA2','VBS','PYTHON','APPLESCRIPT','WSF') else 'warning','offset':off})
         mkrs={'JPEG':(b'\xff\xd9',2),'PNG':(b'IEND',8),'GIF':(b'\x3b',1),'PDF':(b'%%EOF',5)}
         if ct in mkrs:
             m,ex=mkrs[ct]; pos=data.rfind(m)

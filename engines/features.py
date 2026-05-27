@@ -56,6 +56,23 @@ POLYGLOT_INDICATORS = {
     "pdf_in_html":  (b"<html", b"%PDF"),
     "elf_in_pdf":   (b"%PDF", b"\x7fELF"),
     "script_in_pe": (b"MZ", b"<script"),
+    # Cross-platform indicators
+    "bash_in_media":     (b"\xff\xd8", b"#!/bin/bash"),
+    "bash_in_png":       (b"\x89PNG", b"#!/bin/bash"),
+    "sh_in_media":       (b"\xff\xd8", b"#!/bin/sh"),
+    "python_in_media":   (b"\xff\xd8", b"#!/usr/bin/env python"),
+    "applescript_in_media": (b"\xff\xd8", b"osascript"),
+    "macho_in_media":    (b"\xff\xd8", b"\xfe\xed\xfa"),
+    "macho_in_png":      (b"\x89PNG", b"\xfe\xed\xfa"),
+    "macho_in_pdf":      (b"%PDF", b"\xfe\xed\xfa"),
+    "dex_in_media":      (b"\xff\xd8", b"dex\n"),
+    "javaclass_in_media": (b"\xff\xd8", b"\xca\xfe\xba\xbe"),
+    "pe_in_gif":         (b"GIF8", b"MZ"),
+    "elf_in_gif":        (b"GIF8", b"\x7fELF"),
+    "vbs_in_media":      (b"\xff\xd8", b"CreateObject"),
+    "ps1_in_media":      (b"\xff\xd8", b"powershell"),
+    "hta_in_media":      (b"\xff\xd8", b"<hta:"),
+    "lnk_in_media":      (b"\xff\xd8", b"\x4c\x00\x00\x00"),
 }
 
 FEATURE_NAMES_CACHE: Optional[List[str]] = None

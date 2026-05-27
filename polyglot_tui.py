@@ -550,6 +550,9 @@ class PolyglotDetector:
         'MACHO': b'\xfe\xed\xfa', 'LNK': b'\x4c\x00\x00\x00',
         'VBS': b'CreateObject', 'JSCRIPT': b'function(',
         'HTA': b'<hta:', 'SCRIPT': b'<script', 'CMD': b'cmd.exe',
+        'PYTHON': b'#!/usr/bin/env python', 'APPLESCRIPT': b'osascript',
+        'DOTNET': b'\x00\x00\x00\x00\x4d\x5a',
+        'WSF': b'<job', 'HTA2': b'<HTA:',
     }
 
     def entropy(self, data):
@@ -595,8 +598,9 @@ class PolyglotDetector:
         for name, sig in self.SIGS.items():
             off = data.find(sig, 64)
             if off != -1:
-                sev = 'critical' if name in ('PE/EXE','ELF','LNK') else \
-                      'high' if name in ('SCRIPT','HTA','VBS','JSCRIPT','CMD','SH','PS1','BAT') else \
+                sev = 'critical' if name in ('PE/EXE','ELF','LNK',
+                        'SCRIPT','HTA','HTA2','VBS','JSCRIPT','CMD',
+                        'SH','PS1','BAT','PYTHON','APPLESCRIPT','WSF') else \
                       'warning'
                 findings.append({'type':'HIDDEN_SIG','detail':f'{name} @ 0x{off:X}',
                     'severity':sev,'offset':off})
@@ -616,6 +620,34 @@ class PolyglotDetector:
                     findings.append({'type':'TRAILING_DATA',
                         'detail':f'{t:,} bytes after {ct} end — hidden payload',
                         'severity':'critical','offset':pos+extra})
+
+        # ZIP: check for trailing data after EOCD (PK\x05\x06)
+        if ct == 'ZIP':
+            eocd = data.rfind(b'PK\x05\x06')
+            if eocd != -1:
+                # EOCD is 22 bytes minimum, but may have a comment
+                comment_len = 0
+                if eocd + 22 <= len(data):
+                    comment_len = struct.unpack('<H', data[eocd+20:eocd+22])[0]
+                zip_end = eocd + 22 + comment_len
+                if zip_end < len(data):
+                    trailing = data[zip_end:]
+                    t = len(trailing)
+                    if t > 16 and not self._is_safe_trailing(ext, ct, trailing):
+                        findings.append({'type':'TRAILING_DATA',
+                            'detail':f'{t:,} bytes after ZIP EOCD — hidden payload',
+                            'severity':'critical','offset':zip_end})
+
+        # MP4: check for trailing data after last valid atom
+        if ct == 'MP4':
+            mp4_end = self._find_mp4_end(data)
+            if mp4_end > 0 and mp4_end < len(data):
+                trailing = data[mp4_end:]
+                t = len(trailing)
+                if t > 16:
+                    findings.append({'type':'TRAILING_DATA',
+                        'detail':f'{t:,} bytes after MP4 moov atom — hidden payload',
+                        'severity':'critical','offset':mp4_end})
 
         ss = max(len(data)//8, 1)
         for i in range(8):
@@ -638,6 +670,29 @@ class PolyglotDetector:
                 'detail':f'HTML content in {ext} file — executable payload','severity':'critical','offset':0})
 
         return findings
+
+    def _find_mp4_end(self, data: bytes) -> int:
+        """Find the end of valid MP4 atoms. Returns offset of trailing data."""
+        offset = 0
+        last_valid = 0
+        # Top-level MP4 atom types
+        known_atoms = {b'ftyp', b'moov', b'mdat', b'free', b'edts',
+                       b'mdat', b'wide', b'skip', b'udta', b'pdin',
+                       b'mvhd', b'trak', b'uuid', b'ftyp'}
+        while offset + 8 <= len(data):
+            try:
+                size = struct.unpack('>I', data[offset:offset+4])[0]
+                atom_type = data[offset+4:offset+8]
+                if size < 8 or offset + size > len(data):
+                    break
+                if atom_type in known_atoms or atom_type.isalpha():
+                    last_valid = offset + size
+                    offset += size
+                else:
+                    break
+            except Exception:
+                break
+        return last_valid
 
     def _is_safe_trailing(self, ext, ct, trailing):
         """Check if trailing data is safe metadata (not a polyglot payload)."""
@@ -730,6 +785,28 @@ class PolyglotSanitizer:
             return True
         return False
 
+    def _find_mp4_end(self, data: bytes) -> int:
+        """Find the end of valid MP4 atoms. Returns offset of trailing data."""
+        import struct as _struct
+        offset = 0
+        last_valid = 0
+        known_atoms = {b'ftyp', b'moov', b'mdat', b'free', b'edts',
+                       b'wide', b'skip', b'udta', b'pdin', b'uuid'}
+        while offset + 8 <= len(data):
+            try:
+                size = _struct.unpack('>I', data[offset:offset+4])[0]
+                atom_type = data[offset+4:offset+8]
+                if size < 8 or offset + size > len(data):
+                    break
+                if atom_type in known_atoms or atom_type.isalpha():
+                    last_valid = offset + size
+                    offset += size
+                else:
+                    break
+            except Exception:
+                break
+        return last_valid
+
     def sanitize(self, filepath, backup=True):
         with open(filepath, 'rb') as f:
             data = f.read()
@@ -749,9 +826,11 @@ class PolyglotSanitizer:
         elif stripped[:2]==b'MZ': ct='PE'
         elif stripped[:4]==b'\x7fELF': ct='ELF'
         elif stripped[:15].lower().startswith((b'<!doctype',b'<html',b'<?php',b'<?xml',b'<%')): ct='HTML'
+        elif b'ftyp' in stripped[:20]: ct='MP4'
 
         # Extension/content mismatch — file is disguised, can't auto-sanitize
-        ext_map = {'.jpg':'JPEG','.jpeg':'JPEG','.png':'PNG','.gif':'GIF','.pdf':'PDF','.zip':'ZIP','.mp4':'MP4'}
+        ext_map = {'.jpg':'JPEG','.jpeg':'JPEG','.png':'PNG','.gif':'GIF',
+                   '.pdf':'PDF','.zip':'ZIP','.mp4':'MP4'}
         expected = ext_map.get(ext)
         if expected and ct and expected != ct:
             return {'status':'danger',
@@ -779,6 +858,14 @@ class PolyglotSanitizer:
             eocd = data.rfind(b'\x50\x4b\x05\x06')
             if eocd!=-1 and eocd+22<len(data):
                 cleaned = data[:eocd+22]; detected = 'ZIP'
+
+        # MP4: strip trailing data after last valid atom
+        if ext=='.mp4' or ct=='MP4':
+            mp4_end = self._find_mp4_end(data)
+            if mp4_end > 0 and mp4_end < len(data):
+                trailing = data[mp4_end:]
+                if len(trailing) > 16:
+                    cleaned = data[:mp4_end]; detected = 'MP4'
 
         if cleaned is None or len(cleaned)>=orig:
             return {'status':'clean','detail':f'{detected or "Unknown"}: clean','removed':0}
@@ -906,7 +993,7 @@ class PolyglotTUI:
             console.print(f"[red]✗ File not found: {cover}[/red]")
             return
 
-        payload = self.safe_input("[bold cyan]Payload file[/bold cyan] (EXE/BAT/VBS/script)")
+        payload = self.safe_input("[bold cyan]Payload file[/bold cyan] (EXE/ELF/script)")
         if payload is None: return
         if not os.path.isfile(payload):
             console.print(f"[red]✗ File not found: {payload}[/red]")
@@ -915,6 +1002,36 @@ class PolyglotTUI:
         containers = ['jpeg','png','gif','pdf','zip','mp4']
         container = self.safe_input("[bold cyan]Container type[/bold cyan]", choices=containers, default="jpeg")
         if container is None: return
+
+        # Cross-platform payload wrapping
+        console.print("\n[bold]Payload Wrapping:[/bold]")
+        console.print("  [dim]0[/dim] │ None (raw embed)")
+        console.print("  [red]1[/red] │ VBS dropper (Windows)")
+        console.print("  [red]2[/red] │ PowerShell dropper (Windows)")
+        console.print("  [red]3[/red] │ Bash dropper (Linux/macOS)")
+        console.print("  [red]4[/red] │ POSIX sh dropper (Linux/macOS)")
+        console.print("  [red]5[/red] │ Python dropper (cross-platform)")
+        console.print("  [red]6[/red] │ AppleScript dropper (macOS)")
+        console.print("  [red]7[/red] │ Excel macro (.xlsx)")
+        console.print("  [red]8[/red] │ Word macro (.docx)")
+
+        wrap_choice = self.safe_input("[bold cyan]Wrap type[/bold cyan]",
+                                       choices=["0","1","2","3","4","5","6","7","8"], default="0")
+        if wrap_choice is None: return
+
+        payload_type_map = {
+            "0": None, "1": "vbs", "2": "ps1", "3": "bash",
+            "4": "sh", "5": "python", "6": "applescript",
+            "7": "xlsx", "8": "docx",
+        }
+        payload_type = payload_type_map.get(wrap_choice)
+        target_os = "windows"
+        if payload_type in ('bash', 'sh', 'python', 'applescript'):
+            target_os = "linux"
+        elif payload_type in ('xlsx', 'docx'):
+            target_os = self.safe_input("[bold cyan]Target OS[/bold cyan]",
+                                         choices=["windows","macos"], default="windows")
+            if target_os is None: return
 
         encrypt = self.safe_confirm("[bold cyan]XOR encrypt payload?[/bold cyan]", default=False)
         if encrypt is None: return
@@ -931,7 +1048,8 @@ class PolyglotTUI:
             try:
                 progress.update(task, advance=30)
                 stats = self.builder.build(cover, payload, output,
-                    container_type=container, encrypt=encrypt, fud=fud, mime_confuse=mime)
+                    container_type=container, encrypt=encrypt, fud=fud, mime_confuse=mime,
+                    payload_type=payload_type, target_os=target_os)
                 progress.update(task, advance=70)
             except Exception as e:
                 console.print(f"\n[bold red]✗ ERROR: {e}[/bold red]")
@@ -976,7 +1094,10 @@ class PolyglotTUI:
             files = [target]
         else:
             exts = {'.jpg','.jpeg','.png','.gif','.bmp','.pdf','.doc','.docx',
-                    '.zip','.exe','.dll','.bat','.cmd','.ps1','.vbs','.js','.mp4'}
+                    '.zip','.exe','.dll','.bat','.cmd','.ps1','.vbs','.js','.mp4',
+                    '.sh','.bash','.py','.rb','.pl','.applescript','.scpt',
+                    '.xlsx','.xls','.pptx','.ppt','.rtf','.html','.hta','.wsf',
+                    '.7z','.rar','.iso','.elf','.so','.dylib','.macho'}
             files = []
             for root, dirs, fnames in os.walk(target):
                 dirs[:] = [d for d in dirs if not d.startswith('.')]
@@ -1093,7 +1214,9 @@ class PolyglotTUI:
         if os.path.isfile(target):
             files = [target]
         else:
-            exts = {'.jpg','.jpeg','.png','.gif','.bmp','.pdf','.zip','.mp4'}
+            exts = {'.jpg','.jpeg','.png','.gif','.bmp','.pdf','.zip','.mp4',
+                    '.sh','.bash','.py','.rb','.pl','.applescript','.scpt',
+                    '.xlsx','.docx','.7z','.rar','.iso'}
             files = []
             for root, dirs, fnames in os.walk(target):
                 dirs[:] = [d for d in dirs if not d.startswith('.')]

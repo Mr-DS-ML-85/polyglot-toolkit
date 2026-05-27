@@ -280,6 +280,124 @@ def _build_default_rules() -> List[YaraRule]:
         description="Large null-padded section (code cave / hidden payload)",
         condition_fn=lambda d: b"\x00" * 4096 in d,
     ))
+    rules.append(YaraRule(
+        name="PowerShell_EncodedCommand", severity="high",
+        description="PowerShell encoded command (common payload delivery)",
+        regex_patterns=[re.compile(
+            rb"(?i)(?:-enc\s+[A-Za-z0-9+/=]{20,}|"
+            rb"FromBase64String\s*\(|"
+            rb"powershell.*-[eE]nc\s)",
+        )],
+    ))
+    rules.append(YaraRule(
+        name="MachO_In_Media", severity="critical",
+        description="Mach-O binary embedded in image/media file (macOS payload)",
+        patterns=[b"\xfe\xed\xfa", b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe"],
+        condition_fn=lambda d: (
+            d[:4] not in (b"\xfe\xed\xfa", b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe") and
+            d[:4] not in (b"MZ\x90\x00", b"\x7fELF", b"%PDF", b"PK\x03\x04") and
+            any(sig in d[20:] for sig in [b"\xfe\xed\xfa", b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe"])
+        ),
+    ))
+    rules.append(YaraRule(
+        name="DEX_In_Media", severity="high",
+        description="Android DEX bytecode embedded in image/media file",
+        patterns=[b"dex\n"],
+        condition_fn=lambda d: d[:4] != b"dex\n" and b"dex\n" in d[20:],
+    ))
+    rules.append(YaraRule(
+        name="JavaClass_In_Media", severity="high",
+        description="Java class file embedded in image/media file",
+        patterns=[b"\xca\xfe\xba\xbe"],
+        condition_fn=lambda d: (
+            d[:4] != b"\xca\xfe\xba\xbe" and
+            b"\xca\xfe\xba\xbe" in d[20:] and
+            d[:4] not in (b"MZ\x90\x00", b"\x7fELF")
+        ),
+    ))
+    rules.append(YaraRule(
+        name="HTA_In_NonHTA", severity="critical",
+        description="HTML Application (HTA) payload in non-HTA file",
+        regex_patterns=[re.compile(rb"<hta:|<HTA:APPLICATION", re.IGNORECASE)],
+    ))
+    rules.append(YaraRule(
+        name="WSF_Script", severity="critical",
+        description="Windows Script File (WSF) payload embedded in file",
+        patterns=[b"<job", b"<package", b"<script language="],
+        condition_fn=lambda d: b"<job" in d.lower() and b"<script" in d.lower(),
+    ))
+    rules.append(YaraRule(
+        name="Ruby_Dropper", severity="high",
+        description="Ruby script dropper embedded in file",
+        regex_patterns=[re.compile(
+            rb"#!/usr/bin/(?:env\s+)?ruby|"
+            rb"system\s*\(\s*['\"]cmd|"
+            rb"Kernel\.exec|IO\.popen",
+        )],
+    ))
+    rules.append(YaraRule(
+        name="Perl_Dropper", severity="high",
+        description="Perl script dropper embedded in file",
+        regex_patterns=[re.compile(
+            rb"#!/usr/bin/(?:env\s+)?perl|"
+            rb"system\s*\(\s*['\"]|exec\s*\{",
+        )],
+    ))
+    rules.append(YaraRule(
+        name="NSIS_Installer", severity="high",
+        description="NSIS installer stub detected (common for bundling payloads)",
+        patterns=[b"Nullsoft", b"NSIS", b"!@Install@"],
+    ))
+    rules.append(YaraRule(
+        name="AutoIt_Script", severity="high",
+        description="AutoIt script detected (common in malware droppers)",
+        regex_patterns=[re.compile(
+            rb"(?i)autoit3?\.exe|"
+            rb"(?:#(?:NoTrayIcon|RequireAdmin)|"
+            rb"FileInstall\s*\(|"
+            rb"Run\s*\(\s*['\"])",
+        )],
+    ))
+    rules.append(YaraRule(
+        name="LNK_In_Media", severity="critical",
+        description="Windows shortcut (.lnk) embedded in file",
+        patterns=[b"\x4c\x00\x00\x00"],
+        condition_fn=lambda d: (
+            d[:4] != b"\x4c\x00\x00\x00" and
+            b"\x4c\x00\x00\x00" in d[20:1000]
+        ),
+    ))
+    rules.append(YaraRule(
+        name="Office_Macro_In_ZIP", severity="critical",
+        description="Office document with VBA macro (macro-enabled document in archive)",
+        patterns=[b"vbaProject.bin", b"VBA_PROJECT"],
+        condition_fn=lambda d: b"PK\x03\x04" in d[:100],
+    ))
+    rules.append(YaraRule(
+        name="RTF_Exploit", severity="high",
+        description="RTF document with embedded object (OLE exploit pattern)",
+        patterns=[b"{\\rtf", b"\\objupdate", b"\\objdata"],
+        regex_patterns=[re.compile(
+            rb"\\objclass\s+(?:Word\.Document|Package|OLEObject)",
+        )],
+    ))
+    rules.append(YaraRule(
+        name="Script_URL_Download", severity="high",
+        description="Script with URL download command (payload retrieval pattern)",
+        regex_patterns=[re.compile(
+            rb"(?i)(?:curl|wget|Invoke-WebRequest|DownloadFile|"
+            rb"URLDownloadToFile|wget\.exe|bitsadmin|certutil)\s+",
+        )],
+    ))
+    rules.append(YaraRule(
+        name="XOR_Encrypted_Payload", severity="medium",
+        description="Repeated XOR key pattern detected (encrypted payload)",
+        condition_fn=lambda d: (
+            len(d) > 512 and
+            any(d[i] == d[i+key_len] == d[i+2*key_len]
+                for key_len in (1, 2, 4) for i in range(0, min(256, len(d)-2*key_len), key_len))
+        ),
+    ))
 
     # ── LOW: Informational ────────────────────────────────────────────────
     rules.append(YaraRule(
