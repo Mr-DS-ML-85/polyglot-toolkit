@@ -224,20 +224,14 @@ def _macho_feats(data: bytes) -> Dict[str, float]:
             return z
         # Check Mach-O magic (both endiannesses)
         if data[:4] in (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf'):
-            endian = '<'  # Little-endian
+            endian = '>'  # Big-endian (MH_MAGIC / MH_MAGIC_64)
         elif data[:4] in (b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe'):
-            endian = '>'  # Big-endian
+            endian = '<'  # Little-endian (MH_CIGAM / MH_CIGAM_64)
         else:
             return z
         z["macho_valid"] = 1.0
         # 64-bit check
-        z["macho_bits"] = 64.0 if data[4:8] in (b'\xcf\xfa\xed\xfe', b'\xfe\xed\xfa\xcf') else 32.0
-        if z["macho_bits"] == 64.0:
-            magic_str = data[:4]
-            if magic_str == b'\xfe\xed\xfa\xcf':
-                endian = '<'
-            elif magic_str == b'\xcf\xfa\xed\xfe':
-                endian = '>'
+        z["macho_bits"] = 64.0 if data[:4] in (b'\xcf\xfa\xed\xfe', b'\xfe\xed\xfa\xcf') else 32.0
         z["macho_cputype"] = float(struct.unpack_from(endian + "I", data, 4)[0])
         z["macho_cpusubtype"] = float(struct.unpack_from(endian + "I", data, 8)[0])
         z["macho_filetype"] = float(struct.unpack_from(endian + "I", data, 12)[0])

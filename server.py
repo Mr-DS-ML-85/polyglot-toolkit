@@ -172,6 +172,7 @@ class ServerState:
         self.monitor_running = False
         self.alerts = deque(maxlen=200)
         self.stats = {'scanned': 0, 'threats': 0, 'sanitized': 0, 'built': 0}
+        self.build_downloads = {}
 
         # Try to load model
         model_path = "models/polyglot_shield.cbm"
@@ -433,8 +434,6 @@ def api_build():
         # Generate a temp ID for download
         import uuid
         dl_id = str(uuid.uuid4())[:8]
-        if not hasattr(state, 'build_downloads'):
-            state.build_downloads = {}
         state.build_downloads[dl_id] = output
         stats['download_url'] = f'/api/build/download/{dl_id}'
         stats['download_name'] = f'polyglot.{container}'
@@ -454,7 +453,7 @@ def api_build():
 @require_api_key
 def api_build_download(dl_id):
     """Download a built polyglot file."""
-    if not hasattr(state, 'build_downloads') or dl_id not in state.build_downloads:
+    if dl_id not in state.build_downloads:
         return jsonify({'error': 'Download not found or expired'}), 404
     filepath = state.build_downloads[dl_id]
     if not os.path.exists(filepath):
@@ -530,6 +529,12 @@ def api_quarantine_restore():
     dest = data.get('dest', '')
     if not qid:
         return jsonify({'error': 'Missing quarantine ID'}), 400
+    # Validate dest path to prevent path traversal
+    if dest:
+        safe_dest = safe_resolve_path(dest)
+        if not safe_dest:
+            return jsonify({'error': 'Invalid restore path'}), 400
+        dest = safe_dest
     result = state.quarantine.restore(qid, dest or None)
     if result:
         return jsonify({'restored': result})
