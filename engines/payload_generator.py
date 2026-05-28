@@ -842,8 +842,7 @@ class PolyglotEmbedder:
             iend = cover.rfind(b"IEND")
             if iend == -1:
                 raise ValueError("No PNG IEND chunk found")
-            result = cover[iend + 8:]  # After IEND + CRC
-            result = cover + payload_data
+            result = cover + payload_data  # Append after IEND + CRC
 
         elif method == "ancillary":
             # Insert as custom ancillary chunk (tEXt)

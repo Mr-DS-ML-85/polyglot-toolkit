@@ -544,13 +544,13 @@ class MonitorWorker(QThread):
                         fpath = os.path.join(root, fname)
                         try:
                             st = os.stat(fpath); cur = (st.st_mtime, st.st_size)
-                        except: continue
+                        except Exception: continue
                         prev = self.file_hashes.get(fpath)
                         if prev is None or prev != cur:
                             self.file_hashes[fpath] = cur
                             self._scan(fpath)
                 time.sleep(2)
-            except: time.sleep(5)
+            except Exception: time.sleep(5)
 
     def _scan(self, fp):
         findings = self.detector.scan_file(fp)

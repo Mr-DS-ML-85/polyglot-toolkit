@@ -90,34 +90,44 @@ class DNSLookup:
     def _parse_response(self, data: bytes) -> List[str]:
         """Parse DNS response, extract answers."""
         results = []
+        if len(data) < 12:
+            return results
         # Skip header (12 bytes)
         offset = 12
 
         # Skip question section
         qdcount = struct.unpack('!H', data[4:6])[0]
         for _ in range(qdcount):
-            while data[offset] != 0:
+            while offset < len(data) and data[offset] != 0:
                 if data[offset] & 0xC0 == 0xC0:  # Pointer
                     offset += 2
                     break
                 offset += 1 + data[offset]
             else:
-                offset += 1
+                if offset < len(data):
+                    offset += 1
             offset += 4  # QTYPE + QCLASS
 
         # Parse answers
         ancount = struct.unpack('!H', data[6:8])[0]
         for _ in range(ancount):
+            if offset >= len(data):
+                break
             # Skip name (handle pointers)
             if data[offset] & 0xC0 == 0xC0:
                 offset += 2
             else:
-                while data[offset] != 0:
+                while offset < len(data) and data[offset] != 0:
                     offset += 1 + data[offset]
-                offset += 1
+                if offset < len(data):
+                    offset += 1
 
+            if offset + 10 > len(data):
+                break
             rtype, rclass, ttl, rdlength = struct.unpack('!HHIH', data[offset:offset + 10])
             offset += 10
+            if offset + rdlength > len(data):
+                break
             rdata = data[offset:offset + rdlength]
             offset += rdlength
 
@@ -142,15 +152,21 @@ class DNSLookup:
 
         return results
 
-    def _decode_name(self, data: bytes, offset: int) -> str:
+    def _decode_name(self, data: bytes, offset: int, _depth: int = 0) -> str:
         """Decode DNS name from response."""
+        if _depth > 10 or offset >= len(data):
+            return ""
         parts = []
-        while data[offset] != 0:
+        while offset < len(data) and data[offset] != 0:
             if data[offset] & 0xC0 == 0xC0:
+                if offset + 2 > len(data):
+                    break
                 pointer = struct.unpack('!H', data[offset:offset + 2])[0] & 0x3FFF
-                parts.extend(self._decode_name(data, pointer).split('.'))
+                parts.extend(self._decode_name(data, pointer, _depth + 1).split('.'))
                 return '.'.join(parts)
             length = data[offset]
+            if length == 0 or offset + 1 + length > len(data):
+                break
             offset += 1
             parts.append(data[offset:offset + length].decode('ascii', errors='replace'))
             offset += length
@@ -164,11 +180,10 @@ class DNSLookup:
 
         try:
             query = self._build_query(domain, qtype)
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(5)
-            sock.sendto(query, (dns_server, 53))
-            data, _ = sock.recvfrom(4096)
-            sock.close()
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.settimeout(5)
+                sock.sendto(query, (dns_server, 53))
+                data, _ = sock.recvfrom(4096)
 
             results = self._parse_response(data)
             return {
@@ -222,18 +237,17 @@ class WhoisLookup:
                 break
 
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(10)
-            sock.connect((server, 43))
-            sock.send((target + "\r\n").encode())
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(10)
+                sock.connect((server, 43))
+                sock.send((target + "\r\n").encode())
 
-            response = b""
-            while True:
-                data = sock.recv(4096)
-                if not data:
-                    break
-                response += data
-            sock.close()
+                response = b""
+                while True:
+                    data = sock.recv(4096)
+                    if not data:
+                        break
+                    response += data
 
             text = response.decode("utf-8", errors="replace")
 
@@ -281,11 +295,10 @@ class TCPConnectTester:
         """Test TCP connection to host:port."""
         start = time.time()
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(timeout)
-            result = sock.connect_ex((host, port))
-            elapsed = time.time() - start
-            sock.close()
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(timeout)
+                result = sock.connect_ex((host, port))
+                elapsed = time.time() - start
 
             return {
                 "host": host,
@@ -397,12 +410,14 @@ class RawRequestEditor:
             sock.send(raw_request.encode())
 
             response = b""
-            while True:
-                data = sock.recv(4096)
-                if not data:
-                    break
-                response += data
-            sock.close()
+            try:
+                while True:
+                    data = sock.recv(4096)
+                    if not data:
+                        break
+                    response += data
+            finally:
+                sock.close()
 
             response_text = response.decode("utf-8", errors="replace")
 

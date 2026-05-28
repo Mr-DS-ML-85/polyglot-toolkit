@@ -922,7 +922,8 @@ class FormatParser:
             result["arch"] = "64-bit"
             result["endian"] = "reversed"
         if len(data) >= 12:
-            cputype = struct.unpack("<I", data[4:8])[0]
+            endian = ">" if magic in (0xfeedface, 0xfeedfacf) else "<"
+            cputype = struct.unpack(endian + "I", data[4:8])[0]
             result["cputype"] = {0: "x86", 7: "x86_64", 12: "ARM", 16: "ARM64"}.get(
                 cputype & 0xff, str(cputype))
         return result

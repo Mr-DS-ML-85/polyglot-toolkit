@@ -72,17 +72,19 @@ class StegoDetector:
         return findings
 
     def _detect_type(self, data: bytes, ext: str) -> str:
+        if len(data) < 2:
+            return "unknown"
         if data[:2] == b"\xff\xd8":
             return "jpeg"
-        if data[:8] == b"\x89PNG\r\n\x1a\n":
+        if len(data) >= 8 and data[:8] == b"\x89PNG\r\n\x1a\n":
             return "png"
-        if data[:6] in (b"GIF87a", b"GIF89a"):
+        if len(data) >= 6 and data[:6] in (b"GIF87a", b"GIF89a"):
             return "gif"
         if data[:4] == b"%PDF":
             return "pdf"
         if data[:2] == b"PK":
             return "zip"
-        if data[:4] == b"RIFF" and len(data) >= 12:
+        if len(data) >= 12 and data[:4] == b"RIFF":
             sub = data[8:12]
             if sub == b"WAVE":
                 return "wav"
@@ -92,7 +94,7 @@ class StegoDetector:
             return "mp3"
         if data[:4] == b"fLaC":
             return "flac"
-        if data[:4] == b"BM":
+        if data[:2] == b"BM":
             return "bmp"
         if data[:2] in (b"II", b"MM"):
             return "tiff"
@@ -227,6 +229,8 @@ class StegoDetector:
 
         # Chi-square test: compare observed vs expected (uniform)
         expected = len(analysis_data) / 256
+        if expected == 0:
+            return findings
         chi_sq = sum((obs - expected) ** 2 / expected for obs in freq)
 
         # Degrees of freedom = 255
