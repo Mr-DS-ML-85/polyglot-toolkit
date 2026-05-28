@@ -234,6 +234,8 @@ class PolyglotDetector:
           'WSF':b'<job','HTA2':b'<HTA:'}
 
     # Extensions that naturally contain script/PE patterns — skip sig scanning
+    # NOTE: media/document formats (.jpg .png .gif .pdf .bmp) are NOT safe —
+    # polyglots hide payloads in them. Only code/script files are safe.
     SAFE_EXT = {'.py','.js','.ts','.jsx','.tsx','.html','.htm','.xhtml',
                 '.php','.asp','.aspx','.jsp','.vue','.svelte','.rb','.pl',
                 '.sh','.bash','.zsh','.ps1','.bat','.cmd','.vbs','.lua',
@@ -603,7 +605,7 @@ class PolyglotApp(QMainWindow):
 
         # Init quarantine manager early (before UI build)
         self.q_manager = QuarantineManager(
-            quarantine_dir=self.config.quarantine.get("dir","quarantine"),
+            quarantine_dir=os.path.expanduser(self.config.quarantine.get("dir","~/.polyglot/quarantine")),
             encrypt_names=self.config.quarantine.get("encrypt_names",True),
             max_size_mb=self.config.quarantine.get("max_size_mb",500),
             retain_days=self.config.quarantine.get("retain_days",30))
@@ -647,7 +649,7 @@ class PolyglotApp(QMainWindow):
                  ("📜","Activity Log",7),("⚙","Settings",8),("📊","Report",9),
                  ("🔄","Recover .bak",10),("🌐","Server",11),("🔬","Deep Analysis",12),
                  ("📡","Monitoring",13),("🔍","Investigation",14),("📊","Benchmark",15),
-                 ("🌐","Net Tools",16),("⬡","Hex Editor",17),("🔵","Blue Side",18)]
+                 ("🌐","Net Tools",16),("⬡","Hex Editor",17)]
         for icon,label,idx in items:
             b = QPushButton(f"  {icon}   {label}"); b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setStyleSheet(self._nav_s(False)); b.clicked.connect(lambda checked,i=idx,b=b:self._switch(i,b))
@@ -676,8 +678,7 @@ class PolyglotApp(QMainWindow):
             self._pg_investigation(),  # 14
             self._pg_benchmark(),      # 15
             self._pg_network_tools(),  # 16
-            self._pg_hex_editor(),     # 17
-            self._pg_blue_side(),      # 18
+            self._pg_hex_editor(),    # 17
         ]
         for pg in pages:
             self.stack.addWidget(pg)
@@ -957,8 +958,7 @@ class PolyglotApp(QMainWindow):
             ("2", "🛡 File Sanitizer", True),
             ("3", "🔬 Deep Analysis", True),
             ("4", "🌐 Network IOCs", True),
-            ("5", "🔵 Blue Side Indicators", True),
-            ("6", "🔒 Quarantine Threats", False),
+            ("5", "🔒 Quarantine Threats", False),
         ]
         for key, label, default in sections:
             cb = QCheckBox(label); cb.setChecked(default)
@@ -1000,8 +1000,12 @@ class PolyglotApp(QMainWindow):
             from polyglot_tui import PolyglotTUI
             tui = PolyglotTUI()
 
-            # Determine which sections
-            selected = [k for k, cb in self.r_sections.items() if cb.isChecked()]
+            # Determine which sections — safe access to potentially deleted widgets
+            selected = []
+            try:
+                selected = [k for k, cb in self.r_sections.items() if cb.isChecked()]
+            except RuntimeError:
+                selected = ["1","2","3","4","5"]
             section_str = ",".join(selected) if len(selected) < 6 else "all"
 
             # Run report using TUI engine
@@ -1020,14 +1024,17 @@ class PolyglotApp(QMainWindow):
                     report_path = os.path.join(report_dir, reports[0])
                     with open(report_path, 'r') as f:
                         content = f.read()
-                    self.r_output.setPlainText(content)
+                    try: self.r_output.setPlainText(content)
+                    except RuntimeError: pass
                     self._log(f"Report generated: {report_path}", "success")
                     return
 
-            self.r_output.append("Report generation completed. Check ~/.polyglot/reports/")
+            try: self.r_output.append("Report generation completed. Check ~/.polyglot/reports/")
+            except RuntimeError: pass
 
         except Exception as e:
-            self.r_output.append(f"Error: {e}")
+            try: self.r_output.append(f"Error: {e}")
+            except RuntimeError: pass
             self._log(f"Report failed: {e}", "critical")
 
 
@@ -1356,7 +1363,7 @@ class PolyglotApp(QMainWindow):
                 self.da_results.append(f"  Entropy: {self.builder.entropy(data):.4f} bits/byte\n")
                 magic = data[:16].hex() if len(data) >= 16 else data.hex()
                 self.da_results.append(f"  Magic bytes: {magic}\n")
-                fmt = self.detector.detect_format(data, target)
+                fmt = PolyglotDetector.detect_format(data, target)
                 self.da_results.append(f"  Detected format: {fmt}\n")
 
             if "stego" in selected:
@@ -1482,22 +1489,6 @@ class PolyglotApp(QMainWindow):
         tabs = QTabWidget()
         tabs.setStyleSheet(f"QTabWidget::pane{{background:{T.BG2};border:1px solid {T.BORDER}}}QTabBar::tab{{background:{T.BG3};color:{T.DIM};padding:8px 16px;border:none}}QTabBar::tab:selected{{background:{T.BG2};color:{T.CYAN};border-bottom:2px solid {T.CYAN}}}")
 
-        # Live Logs — reads from actual log files
-        ll = QWidget(); lll = QVBoxLayout(ll)
-        self.mon_live_log = log_box(); lll.addWidget(self.mon_live_log, 1)
-        refresh_btn = btn("🔄 Refresh Logs", T.CYAN)
-        refresh_btn.clicked.connect(self._refresh_monitor_logs)
-        lll.addWidget(refresh_btn)
-        tabs.addTab(ll, "Live Logs")
-
-        # Alerts — shows critical/high severity events
-        al = QWidget(); alll = QVBoxLayout(al)
-        self.mon_alerts = log_box(); alll.addWidget(self.mon_alerts, 1)
-        alert_btn = btn("🔄 Load Alerts", T.RED)
-        alert_btn.clicked.connect(self._refresh_monitor_alerts)
-        alll.addWidget(alert_btn)
-        tabs.addTab(al, "Alerts")
-
         # Real-Time Threats — multi-file threat table
         tt = QWidget(); ttl = QVBoxLayout(tt)
         self.mon_threats_tree = QTreeWidget()
@@ -1516,11 +1507,6 @@ class PolyglotApp(QMainWindow):
         ttl.addLayout(threat_btn_row)
         tabs.addTab(tt, "⚠ Threats")
 
-        # File Changes — uses monitor worker if active
-        fc = QWidget(); fcl = QVBoxLayout(fc)
-        self.mon_changes = log_box(); fcl.addWidget(self.mon_changes, 1)
-        tabs.addTab(fc, "File Changes")
-
         # Metrics — scan stats
         mx = QWidget(); mxl = QVBoxLayout(mx)
         self.mon_metrics = log_box(); mxl.addWidget(self.mon_metrics, 1)
@@ -1537,8 +1523,6 @@ class PolyglotApp(QMainWindow):
 
     def _safe_refresh_monitor(self):
         """Safe wrapper — widgets may be deleted if stack was rebuilt."""
-        try: self._refresh_monitor_logs()
-        except RuntimeError: pass
         try: self._refresh_monitor_metrics()
         except RuntimeError: pass
         try: self._refresh_threats_tab()
@@ -1586,53 +1570,6 @@ class PolyglotApp(QMainWindow):
                         except: pass
             except: pass
 
-    def _refresh_monitor_logs(self):
-        if not hasattr(self, 'mon_live_log'): return
-        try: self.mon_live_log.clear()
-        except RuntimeError: return
-        log_dir = os.path.expanduser("~/.polyglot/logs")
-        if not os.path.isdir(log_dir):
-            append_log(self.mon_live_log, "No log directory found", T.DIM)
-            return
-        count = 0
-        for fname in sorted(os.listdir(log_dir), reverse=True)[:5]:
-            if not fname.endswith('.jsonl'): continue
-            try:
-                with open(os.path.join(log_dir, fname)) as f:
-                    for line in f:
-                        try:
-                            e = json.loads(line.strip())
-                            sev = e.get('severity','info')
-                            color = T.RED if sev in ('critical','high') else T.YELLOW if sev == 'warning' else T.GREEN if sev == 'success' else T.FG
-                            append_log(self.mon_live_log, f"[{e.get('timestamp','')[:19]}] [{sev.upper()}] {e.get('source','')}: {e.get('message','')}", color)
-                            count += 1
-                        except: pass
-            except: pass
-        append_log(self.mon_live_log, f"\nLoaded {count} log entries", T.DIM)
-
-    def _refresh_monitor_alerts(self):
-        if not hasattr(self, 'mon_alerts'): return
-        try: self.mon_alerts.clear()
-        except RuntimeError: return
-        log_dir = os.path.expanduser("~/.polyglot/logs")
-        if not os.path.isdir(log_dir):
-            append_log(self.mon_alerts, "No alerts found", T.DIM)
-            return
-        count = 0
-        for fname in sorted(os.listdir(log_dir), reverse=True):
-            if not fname.endswith('.jsonl'): continue
-            try:
-                with open(os.path.join(log_dir, fname)) as f:
-                    for line in f:
-                        try:
-                            e = json.loads(line.strip())
-                            if e.get('severity') in ('critical', 'high'):
-                                append_log(self.mon_alerts, f"[{e.get('timestamp','')[:19]}] {e.get('severity','').upper()}: {e.get('message','')}", T.RED)
-                                count += 1
-                        except: pass
-            except: pass
-        append_log(self.mon_alerts, f"\n{count} alerts found", T.DIM)
-
     def _refresh_monitor_metrics(self):
         if not hasattr(self, 'mon_metrics'): return
         try: self.mon_metrics.clear()
@@ -1645,20 +1582,43 @@ class PolyglotApp(QMainWindow):
         append_log(self.mon_metrics, f"  ML Model:       {'Loaded' if self.model.is_loaded else 'Not loaded'}", T.FG)
         append_log(self.mon_metrics, f"  Quarantined:    {len(self.q_manager.list_quarantined())} files", T.YELLOW)
 
+    def _refresh_file_changes(self):
+        if not hasattr(self, 'mon_changes'): return
+        try: self.mon_changes.clear()
+        except RuntimeError: return
+        count = 0
+        # From threat_log — show files that were modified/sanitized
+        for r in self.threat_log:
+            sev = r.get('severity', '')
+            fname = r.get('file', r.get('path', ''))
+            label = r.get('ml_label', '')
+            if sev in ('critical', 'high') or 'sanitiz' in label.lower():
+                color = T.RED if sev in ('critical','high') else T.GREEN
+                append_log(self.mon_changes,
+                    f"[{r.get('time','')[:19]}] {os.path.basename(fname)} — {sev.upper()}: {label}",
+                    color)
+                count += 1
+        # From quarantine — show files moved to vault
+        for q in self.q_manager.list_quarantined():
+            append_log(self.mon_changes,
+                f"[{q.get('quarantined_at','')[:19]}] QUARANTINED: {q.get('original_name','?')} — {q.get('reason','')}",
+                T.ORANGE)
+            count += 1
+        if count == 0:
+            append_log(self.mon_changes, "No file changes detected — scan files first", T.DIM)
+        else:
+            append_log(self.mon_changes, f"\n{count} file changes", T.DIM)
+
 
     # ── Menu 11: Investigation Panel ────────────────────────
 
     def _pg_investigation(self):
         p = QWidget(); l = QVBoxLayout(p); l.setContentsMargins(30,25,30,25); l.setSpacing(12)
-        l.addWidget(self._header("🔍 Investigation Panel — 9 Tools", T.YELLOW))
+        l.addWidget(self._header("🔍 Investigation Panel", T.YELLOW))
 
         tabs = QTabWidget()
         tabs.setStyleSheet(f"QTabWidget::pane{{background:{T.BG2};border:1px solid {T.BORDER}}}QTabBar::tab{{background:{T.BG3};color:{T.DIM};padding:8px 16px;border:none}}QTabBar::tab:selected{{background:{T.BG2};color:{T.YELLOW};border-bottom:2px solid {T.YELLOW}}}")
 
-        tabs.addTab(self._inv_search_logs(),"Searchable Logs")
-        tabs.addTab(self._inv_timeline(),"Timeline View")
-        tabs.addTab(self._inv_correlation(),"Request Correlation")
-        tabs.addTab(self._inv_tagged(),"Tagged Events")
         tabs.addTab(self._inv_bookmarks(),"Bookmarks")
         tabs.addTab(self._inv_export(),"Export Investigation")
         tabs.addTab(self._inv_notes(),"Notes Sidebar")
@@ -1684,22 +1644,42 @@ class PolyglotApp(QMainWindow):
         query = self.inv_search.text().strip().lower()
         if not query: return
         self.inv_results.clear()
-        log_dir = os.path.expanduser("~/.polyglot/logs")
-        if not os.path.isdir(log_dir): return
         count = 0
-        for fname in sorted(os.listdir(log_dir), reverse=True):
-            if not fname.endswith('.jsonl'): continue
-            try:
-                with open(os.path.join(log_dir, fname)) as f:
-                    for line in f:
-                        if query in line.lower():
-                            try:
-                                e = json.loads(line.strip())
-                                item = QTreeWidgetItem([e.get('timestamp','')[:19], e.get('source',''), e.get('severity',''), e.get('message','')[:100]])
-                                self.inv_results.addTopLevelItem(item)
-                                count += 1
-                            except: pass
-            except: pass
+        # Search in-memory threat_log
+        for r in self.threat_log:
+            line = json.dumps(r).lower()
+            if query in line:
+                fname = os.path.basename(r.get('file', r.get('path', '?')))
+                item = QTreeWidgetItem([
+                    r.get('time','')[:19], f"scan:{fname}",
+                    r.get('severity',''), r.get('ml_label','')[:100]])
+                self.inv_results.addTopLevelItem(item)
+                count += 1
+        # Search quarantine
+        for q in self.q_manager.list_quarantined():
+            line = json.dumps(q).lower()
+            if query in line:
+                item = QTreeWidgetItem([
+                    q.get('quarantined_at','')[:19], 'quarantine',
+                    'warning', q.get('original_name','')[:100]])
+                self.inv_results.addTopLevelItem(item)
+                count += 1
+        # Search file-based logs
+        log_dir = os.path.expanduser("~/.polyglot/logs")
+        if os.path.isdir(log_dir):
+            for fname in sorted(os.listdir(log_dir), reverse=True):
+                if not fname.endswith('.jsonl'): continue
+                try:
+                    with open(os.path.join(log_dir, fname)) as f:
+                        for line in f:
+                            if query in line.lower():
+                                try:
+                                    e = json.loads(line.strip())
+                                    item = QTreeWidgetItem([e.get('timestamp','')[:19], e.get('source',''), e.get('severity',''), e.get('message','')[:100]])
+                                    self.inv_results.addTopLevelItem(item)
+                                    count += 1
+                                except: pass
+                except: pass
         self._log(f"Search '{query}': {count} matches","info")
 
     def _inv_timeline(self):
@@ -1714,22 +1694,42 @@ class PolyglotApp(QMainWindow):
 
     def _refresh_timeline(self):
         self.inv_timeline_tree.clear()
-        log_dir = os.path.expanduser("~/.polyglot/logs")
-        if not os.path.isdir(log_dir): return
         events = []
-        for fname in sorted(os.listdir(log_dir)):
-            if not fname.endswith('.jsonl'): continue
-            try:
-                with open(os.path.join(log_dir, fname)) as f:
-                    for line in f:
-                        try:
-                            e = json.loads(line.strip())
-                            events.append(e)
-                        except: pass
-            except: pass
+        # In-memory threat_log
+        for r in self.threat_log:
+            fname = os.path.basename(r.get('file', r.get('path', '?')))
+            events.append({
+                'timestamp': r.get('time', ''),
+                'message': f"[{r.get('severity','').upper()}] {fname}: {r.get('ml_label','')}",
+                'source': 'scan',
+                'severity': r.get('severity', '')
+            })
+        # In-memory quarantine
+        for q in self.q_manager.list_quarantined():
+            events.append({
+                'timestamp': q.get('quarantined_at', ''),
+                'message': f"QUARANTINED: {q.get('original_name','?')} — {q.get('reason','')}",
+                'source': 'quarantine',
+                'severity': 'warning'
+            })
+        # File-based logs
+        log_dir = os.path.expanduser("~/.polyglot/logs")
+        if os.path.isdir(log_dir):
+            for fname in sorted(os.listdir(log_dir)):
+                if not fname.endswith('.jsonl'): continue
+                try:
+                    with open(os.path.join(log_dir, fname)) as f:
+                        for line in f:
+                            try:
+                                events.append(json.loads(line.strip()))
+                            except: pass
+                except: pass
         events.sort(key=lambda x: x.get('timestamp',''))
         for e in events[-500:]:
-            item = QTreeWidgetItem([e.get('timestamp','')[:19], e.get('message','')[:80], e.get('source',''), e.get('severity','')])
+            sev = e.get('severity','')
+            color = T.RED if sev in ('critical','high') else T.YELLOW if sev == 'warning' else T.GREEN if sev == 'success' else T.FG
+            item = QTreeWidgetItem([e.get('timestamp','')[:19], e.get('message','')[:80], e.get('source',''), sev])
+            for i in range(4): item.setForeground(i, QColor(color))
             self.inv_timeline_tree.addTopLevelItem(item)
 
     def _inv_snapshots(self):
@@ -1921,17 +1921,18 @@ class PolyglotApp(QMainWindow):
 
     def _gen_benchmark(self):
         n = self.bm_samples.value()
-        append_log(self.bm_log, f"Generating {n} benchmark samples...", T.CYAN)
+        append_log(self.bm_log, f"Generating {n} benchmark samples per category...", T.CYAN)
         try:
-            gen = SyntheticGenerator()
+            from engines.onnx_export import BenchmarkGenerator
+            gen = BenchmarkGenerator()
             output_dir = os.path.expanduser("~/.polyglot/benchmark")
-            os.makedirs(output_dir, exist_ok=True)
-            # Generate clean images
-            for i in range(min(n, 100)):
-                fp = os.path.join(output_dir, f"clean_{i:04d}.jpg")
-                with open(fp, 'wb') as f:
-                    f.write(bytes([0xFF,0xD8,0xFF,0xE0]) + os.urandom(random.randint(1000,5000)) + bytes([0xFF,0xD9]))
-            append_log(self.bm_log, f"Generated {min(n,100)} clean images in {output_dir}", T.GREEN)
+            result = gen.generate(output_dir, samples_per_type=n)
+            total = result.get('total_files', 0)
+            append_log(self.bm_log, f"Generated {total} benchmark files in {output_dir}", T.GREEN)
+            for tname, tinfo in result.get('tests', {}).items():
+                cnt = tinfo.get('count', 0)
+                expected = tinfo.get('expected_detections', 0)
+                append_log(self.bm_log, f"  {tname}: {cnt} files (expect {expected} detections)", T.DIM)
             append_log(self.bm_log, "Benchmark dataset ready for CI testing", T.GREEN)
             self._log(f"Benchmark dataset generated: {output_dir}","success")
         except Exception as e:
@@ -1945,13 +1946,20 @@ class PolyglotApp(QMainWindow):
         files = [os.path.join(test_dir,f) for f in os.listdir(test_dir) if os.path.isfile(os.path.join(test_dir,f))]
         append_log(self.ci_results, f"Testing {len(files)} files...", T.CYAN)
         threats = 0
+        tested = 0
         for fp in files[:50]:
             try:
-                result = self.detector.detect(fp)
-                if result.get('severity','clean') != 'clean': threats += 1
-            except: pass
-        append_log(self.ci_results, f"Results: {threats}/{min(len(files),50)} flagged", T.GREEN if threats==0 else T.YELLOW)
-        self._log(f"CI test complete: {threats} threats in {min(len(files),50)} files","info")
+                findings = self.detector.scan_file(fp)
+                tested += 1
+                crit = [f for f in findings if f.get('severity','').upper() in ('CRITICAL','HIGH')]
+                if crit:
+                    threats += 1
+                    append_log(self.ci_results, f"  ⚠ {os.path.basename(fp)}: {crit[0].get('indicator','')}", T.RED)
+            except Exception as e:
+                append_log(self.ci_results, f"  ✗ {os.path.basename(fp)}: {e}", T.DIM)
+        color = T.GREEN if threats == 0 else T.RED
+        append_log(self.ci_results, f"\nResults: {threats}/{tested} flagged", color)
+        self._log(f"CI test complete: {threats} threats in {tested} files","info")
 
     def _export_onnx(self):
         if not self.model.is_loaded:
@@ -2461,22 +2469,54 @@ class PolyglotApp(QMainWindow):
         fp = self.ioc_file.text().strip()
         if not fp or not os.path.isfile(fp):
             return
-        self.ioc_results.clear()
-        self.ioc_enrichment.clear()
+        try:
+            self.ioc_results.clear()
+            self.ioc_enrichment.clear()
+        except RuntimeError:
+            return
 
         try:
             with open(fp, 'rb') as f:
                 data = f.read()
-            text = data.decode('utf-8', errors='replace')
+            full_text = data.decode('utf-8', errors='replace')
         except Exception as e:
             append_log(self.ioc_enrichment, f"Error reading file: {e}", T.RED)
             return
 
-        # Extract IOCs
-        ips = list(set(re.findall(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', text)))
-        domains = list(set(re.findall(r'\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b', text)))
-        emails = list(set(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)))
-        urls = list(set(re.findall(r'https?://[^\s<>"\'\x00-\x1f]+', text)))
+        # Smart extraction: find the PAYLOAD portion of polyglots
+        # For images: extract text after end marker (IEND, ff d9, GIF terminator)
+        # For scripts: use the whole text
+        script_text = ""
+        payload_offset = 0
+        markers = [
+            (b'IEND', 8, 'PNG'),       # PNG: 4-byte chunk name + 4-byte CRC
+            (b'\xff\xd9', 2, 'JPEG'),   # JPEG: EOI marker
+            (b'\x3b', 1, 'GIF'),        # GIF: trailer
+            (b'%%EOF', 5, 'PDF'),       # PDF: EOF marker
+        ]
+        for marker, extra, fmt in markers:
+            pos = data.rfind(marker)
+            if pos != -1 and pos + extra < len(data):
+                payload = data[pos + extra:]
+                # Check if there's a script after the end marker
+                payload_str = payload.decode('utf-8', errors='replace')
+                if any(sig in payload_str[:500] for sig in
+                       ['#!/bin/', '#!/usr/bin/', 'import ', 'from ',
+                        'CreateObject', 'powershell', '<script',
+                        '<hta:', 'function ', 'var ', 'cmd.exe']):
+                    script_text = payload_str
+                    payload_offset = pos + extra
+                    break
+
+        # If no script payload found, scan full text but be stricter
+        if not script_text:
+            script_text = full_text
+
+        # Extract IOCs from script payload
+        ips = list(set(re.findall(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', script_text)))
+        domains = list(set(re.findall(r'\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b', script_text)))
+        emails = list(set(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', script_text)))
+        urls = list(set(re.findall(r'https?://[^\s<>"\'\x00-\x1f]+', script_text)))
 
         # Filter out common false positives
         filtered_domains = [d for d in domains if not d.endswith(('.dll', '.exe', '.sys', '.tmp'))
@@ -2485,38 +2525,46 @@ class PolyglotApp(QMainWindow):
                        and not all(int(o) <= 1 for o in ip.split('.'))]
 
         # Populate tree
-        for ip in sorted(filtered_ips):
-            QTreeWidgetItem(self.ioc_results, ["IP", ip, "1"])
-        for d in sorted(filtered_domains):
-            QTreeWidgetItem(self.ioc_results, ["Domain", d, "1"])
-        for e in sorted(emails):
-            QTreeWidgetItem(self.ioc_results, ["Email", e, "1"])
-        for u in sorted(urls)[:50]:
-            QTreeWidgetItem(self.ioc_results, ["URL", u[:100], "1"])
+        try:
+            for ip in sorted(filtered_ips):
+                QTreeWidgetItem(self.ioc_results, ["IP", ip, "1"])
+            for d in sorted(filtered_domains):
+                QTreeWidgetItem(self.ioc_results, ["Domain", d, "1"])
+            for e in sorted(emails):
+                QTreeWidgetItem(self.ioc_results, ["Email", e, "1"])
+            for u in sorted(urls)[:50]:
+                QTreeWidgetItem(self.ioc_results, ["URL", u[:100], "1"])
+        except RuntimeError:
+            return
 
         total = len(filtered_ips) + len(filtered_domains) + len(emails) + len(urls)
-        append_log(self.ioc_enrichment, f"Extracted {total} IOCs from {os.path.basename(fp)}", T.CYAN)
-        append_log(self.ioc_enrichment, f"  IPs: {len(filtered_ips)}", T.GREEN)
-        append_log(self.ioc_enrichment, f"  Domains: {len(filtered_domains)}", T.GREEN)
-        append_log(self.ioc_enrichment, f"  Emails: {len(emails)}", T.GREEN)
-        append_log(self.ioc_enrichment, f"  URLs: {len(urls)}", T.GREEN)
+        try:
+            if payload_offset:
+                append_log(self.ioc_enrichment, f"Payload at offset 0x{payload_offset:X}", T.YELLOW)
+            append_log(self.ioc_enrichment, f"Extracted {total} IOCs from {os.path.basename(fp)}", T.CYAN)
+            append_log(self.ioc_enrichment, f"  IPs: {len(filtered_ips)}", T.GREEN)
+            append_log(self.ioc_enrichment, f"  Domains: {len(filtered_domains)}", T.GREEN)
+            append_log(self.ioc_enrichment, f"  Emails: {len(emails)}", T.GREEN)
+            append_log(self.ioc_enrichment, f"  URLs: {len(urls)}", T.GREEN)
 
-        # Auto-enrich first few IPs/domains
-        append_log(self.ioc_enrichment, "\n── Auto-Enrichment ──", T.YELLOW)
-        import socket
-        for ip in filtered_ips[:3]:
-            try:
-                hostname = socket.gethostbyaddr(ip)[0]
-                append_log(self.ioc_enrichment, f"  {ip} → {hostname}", T.BLUE)
-            except:
-                append_log(self.ioc_enrichment, f"  {ip} → (no reverse DNS)", T.DIM)
+            # Auto-enrich first few IPs/domains
+            append_log(self.ioc_enrichment, "\n── Auto-Enrichment ──", T.YELLOW)
+            import socket
+            for ip in filtered_ips[:3]:
+                try:
+                    hostname = socket.gethostbyaddr(ip)[0]
+                    append_log(self.ioc_enrichment, f"  {ip} → {hostname}", T.BLUE)
+                except:
+                    append_log(self.ioc_enrichment, f"  {ip} → (no reverse DNS)", T.DIM)
 
-        for d in filtered_domains[:3]:
-            try:
-                ip = socket.gethostbyname(d)
-                append_log(self.ioc_enrichment, f"  {d} → {ip}", T.BLUE)
-            except:
-                append_log(self.ioc_enrichment, f"  {d} → (DNS failed)", T.DIM)
+            for d in filtered_domains[:3]:
+                try:
+                    ip = socket.gethostbyname(d)
+                    append_log(self.ioc_enrichment, f"  {d} → {ip}", T.BLUE)
+                except:
+                    append_log(self.ioc_enrichment, f"  {d} → (DNS failed)", T.DIM)
+        except RuntimeError:
+            return
 
     def _send_raw_req(self):
         import socket
@@ -2692,7 +2740,6 @@ class PolyglotApp(QMainWindow):
         """Render hex dump as HTML with color-coded regions."""
         highlight_offsets = highlight_offsets or set()
         html_lines = []
-        html_lines.append('<pre style="font-family:Courier New,Consolas,monospace;font-size:12px;line-height:1.5;margin:0">')
 
         # Format signature colors
         sig_regions = []
@@ -2711,11 +2758,10 @@ class PolyglotApp(QMainWindow):
 
         for i in range(0, min(len(data), 100000), 16):
             chunk = data[i:i+16]
-            hex_parts = []
+            hex_cells = []
             for j, b in enumerate(chunk):
                 offset = i + j
                 color = None
-                # Check if this byte is in a highlight
                 if offset in highlight_offsets:
                     color = '#ff4444'
                 else:
@@ -2723,17 +2769,18 @@ class PolyglotApp(QMainWindow):
                         if rs <= offset < re_:
                             color = rc
                             break
-
                 hex_str = f'{b:02x}'
                 if color:
-                    hex_parts.append(f'<span style="background:{color};color:white;font-weight:bold">{hex_str}</span>')
+                    hex_cells.append(f'<span style="background:{color};color:white;font-weight:bold">{hex_str}</span>')
                 else:
-                    hex_parts.append(hex_str)
+                    hex_cells.append(hex_str)
 
-            hex_part = ' '.join(hex_parts)
-            ascii_part = ''.join(chr(b) if 32 <= b < 127 else '·' for b in chunk)
+            # Pad hex cells to 16 with invisible placeholders
+            while len(chunk) < 16:
+                hex_cells.append('  ')
+            hex_part = ' '.join(hex_cells)
 
-            # Highlight in ASCII column too
+            # ASCII column
             ascii_html = ''
             for j, b in enumerate(chunk):
                 ch = chr(b) if 32 <= b < 127 else '·'
@@ -2743,10 +2790,16 @@ class PolyglotApp(QMainWindow):
                 else:
                     ascii_html += ch
 
-            html_lines.append(f'<span style="color:{T.DIM}">{i:08x}</span>  {hex_part:<140s}  <span style="color:{T.CYAN}>|{ascii_html}|</span>')
+            addr = f'<span style="color:{T.DIM}">{i:08x}</span>'
+            ascii_col = f'<span style="color:{T.CYAN}">{ascii_html}</span>'
+            html_lines.append(f'{addr}  {hex_part}  |{ascii_col}|')
 
-        html_lines.append('</pre>')
-        self.hex_dump.setHtml('\n'.join(html_lines))
+        # Use <pre> with real newlines — Qt's rich text engine handles this properly
+        content = '\n'.join(html_lines)
+        self.hex_dump.setHtml(
+            f'<pre style="font-family:Courier New,Consolas,monospace;font-size:12px;'
+            f'line-height:1.5;margin:0">{content}</pre>'
+        )
 
     def _hex_realtime_search(self, query):
         """Real-time hex/ASCII search with red highlighting."""
@@ -2852,10 +2905,11 @@ class PolyglotApp(QMainWindow):
         name = os.path.basename(path)
         sz = os.path.getsize(path)
         self._log(f"📁 File selected: {name} ({sz:,} bytes)", "info")
-        # Auto-populate all file entries that exist
-        for attr in ('s_path', 'da_target', 'hex_file'):
+        # Auto-populate ALL file entries (scanner, analysis, hex, IOC)
+        # Skip builder (has cover + payload — separate concept)
+        for attr in ('s_path', 'da_target', 'hex_file', 'ioc_file'):
             w = getattr(self, attr, None)
-            if w and isinstance(w, QLineEdit) and not w.text().strip():
+            if w and isinstance(w, QLineEdit):
                 w.setText(path)
         # Update dashboard file label
         if hasattr(self, 'd_file_label'):
@@ -2904,6 +2958,16 @@ class PolyglotApp(QMainWindow):
                   'success':T.GREEN,'header':T.RED,'clean':T.CYAN}
         ts = datetime.now().strftime('%H:%M:%S')
         append_log(self.log_box_main, f"[{ts}] {text}", colors.get(tag, T.FG))
+        # Persist to JSONL for monitoring/investigation panels
+        try:
+            log_dir = os.path.expanduser("~/.polyglot/logs")
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, f"{datetime.now().strftime('%Y-%m-%d')}.jsonl")
+            entry = {"timestamp": datetime.now().isoformat(), "source": "gui",
+                     "severity": tag or "info", "message": text}
+            with open(log_file, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception: pass
 
     # ── Builder Action ───────────────────────────────────────
 

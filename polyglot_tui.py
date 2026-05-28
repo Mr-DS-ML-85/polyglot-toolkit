@@ -548,17 +548,13 @@ End Function
                 polyglot = self._build_elf_polyglot(cover, payload, container_type.lower(), arch=arch)
             elif is_macho:
                 polyglot = self._build_macho_polyglot(cover, payload, container_type.lower(), arch=arch)
-        elif is_image and target_os in ('windows', 'linux', 'macos'):
-            # Raw payload + target_os specified → wrap in platform executable + overlay
-            if target_os == 'windows':
-                polyglot = self._build_pe_polyglot(cover, payload, container_type.lower(), arch=arch)
-            elif target_os == 'linux':
-                if arch == 'arm32':
-                    polyglot = self._build_valid_elf32_arm_stub(payload) + cover
-                else:
-                    polyglot = self._build_elf_polyglot(cover, payload, container_type.lower(), arch=arch)
-            elif target_os == 'macos':
-                polyglot = self._build_macho_polyglot(cover, payload, container_type.lower(), arch=arch)
+        elif is_image and target_os in ('windows', 'linux', 'macos') and not is_executable:
+            # Raw payload + image container → use image embedding (photo stays viewable)
+            # Overlay would corrupt the image (file starts with MZ/ELF/Mach-O header)
+            builder = builders.get(container_type.lower())
+            if not builder:
+                raise ValueError(f"Unsupported: {container_type}")
+            polyglot = builder(cover, payload)
         else:
             builder = builders.get(container_type.lower())
             if not builder:

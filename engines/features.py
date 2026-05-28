@@ -214,6 +214,40 @@ def _elf_feats(data: bytes) -> Dict[str, float]:
     return z
 
 
+def _macho_feats(data: bytes) -> Dict[str, float]:
+    """Extract Mach-O (macOS) structural features."""
+    z = {"macho_valid": 0, "macho_bits": 0, "macho_cputype": 0,
+         "macho_cpusubtype": 0, "macho_filetype": 0, "macho_ncmds": 0,
+         "macho_flags": 0}
+    try:
+        if len(data) < 32:
+            return z
+        # Check Mach-O magic (both endiannesses)
+        if data[:4] in (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf'):
+            endian = '<'  # Little-endian
+        elif data[:4] in (b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe'):
+            endian = '>'  # Big-endian
+        else:
+            return z
+        z["macho_valid"] = 1.0
+        # 64-bit check
+        z["macho_bits"] = 64.0 if data[4:8] in (b'\xcf\xfa\xed\xfe', b'\xfe\xed\xfa\xcf') else 32.0
+        if z["macho_bits"] == 64.0:
+            magic_str = data[:4]
+            if magic_str == b'\xfe\xed\xfa\xcf':
+                endian = '<'
+            elif magic_str == b'\xcf\xfa\xed\xfe':
+                endian = '>'
+        z["macho_cputype"] = float(struct.unpack_from(endian + "I", data, 4)[0])
+        z["macho_cpusubtype"] = float(struct.unpack_from(endian + "I", data, 8)[0])
+        z["macho_filetype"] = float(struct.unpack_from(endian + "I", data, 12)[0])
+        z["macho_ncmds"] = float(struct.unpack_from(endian + "I", data, 16)[0])
+        z["macho_flags"] = float(struct.unpack_from(endian + "I", data, 24)[0])
+    except Exception:
+        pass
+    return z
+
+
 def _pdf_feats(data: bytes) -> Dict[str, float]:
     z = {"pdf_obj_count": 0, "pdf_stream_count": 0, "pdf_xref_present": 0,
          "pdf_trailer_present": 0, "pdf_js_present": 0, "pdf_embedded_files": 0}
@@ -251,6 +285,9 @@ def get_feature_names() -> List[str]:
               "pe_sections", "pe_optional_hdr_size", "pe_characteristics"])
     n.extend(["elf_class", "elf_data", "elf_type",
               "elf_machine", "elf_phoff", "elf_shoff"])
+    n.extend(["macho_valid", "macho_bits", "macho_cputype",
+              "macho_cpusubtype", "macho_filetype", "macho_ncmds",
+              "macho_flags"])
     n.extend(["pdf_obj_count", "pdf_stream_count", "pdf_xref_present",
               "pdf_trailer_present", "pdf_js_present", "pdf_embedded_files"])
     n.extend(["file_size_log", "header_hash_byte"])
@@ -285,6 +322,10 @@ def extract_features(data: bytes, cfg: dict = None) -> np.ndarray:
     ef = _elf_feats(data)
     f.extend(ef[k] for k in ["elf_class", "elf_data", "elf_type",
                               "elf_machine", "elf_phoff", "elf_shoff"])
+    mf = _macho_feats(data)
+    f.extend(mf[k] for k in ["macho_valid", "macho_bits", "macho_cputype",
+                              "macho_cpusubtype", "macho_filetype", "macho_ncmds",
+                              "macho_flags"])
     pf = _pdf_feats(data)
     f.extend(pf[k] for k in ["pdf_obj_count", "pdf_stream_count", "pdf_xref_present",
                               "pdf_trailer_present", "pdf_js_present", "pdf_embedded_files"])

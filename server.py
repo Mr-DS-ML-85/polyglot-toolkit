@@ -154,7 +154,7 @@ class ServerState:
         self.model = PolyglotModel(self.config.model)
         self.yara = YaraEngine()
         self.quarantine = QuarantineManager(
-            quarantine_dir=self.config.quarantine.get("dir", "quarantine"))
+            quarantine_dir=os.path.expanduser(self.config.quarantine.get("dir", "~/.polyglot/quarantine")))
         self.monitor_thread = None
         self.monitor_running = False
         self.alerts = deque(maxlen=200)

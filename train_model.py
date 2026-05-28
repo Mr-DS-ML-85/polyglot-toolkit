@@ -77,12 +77,14 @@ def train(csv_path, task_type="GPU", output="models/polyglot_shield.cbm"):
     config = {
         "task_type": task_type,
         "iterations": 2000,
-        "learning_rate": 0.02,
-        "depth": 8,
-        "l2_leaf_reg": 3,
-        "early_stopping_rounds": 200,
+        "learning_rate": 0.03,
+        "depth": 6,
+        "l2_leaf_reg": 5,
+        "early_stopping_rounds": 100,
         "verbose": 50,
         "auto_class_weights": "Balanced",
+        "random_strength": 2.0,
+        "bagging_temperature": 0.8,
     }
 
     model = PolyglotModel(config)
