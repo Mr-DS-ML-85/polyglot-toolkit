@@ -314,6 +314,63 @@ def scan_file(filepath: str, verbose: bool = False) -> list:
                         f'{sig_name} found at byte {marker_pos + len(fmt["end_marker"]) + pos:,} — script in trailing data.'
                     ))
 
+    # 5b. Analyze script files for malicious content (reverse shells, droppers, etc.)
+    SCRIPT_FILE_EXT = {'.sh', '.bash', '.zsh', '.ps1', '.bat', '.cmd', '.vbs', '.py', '.rb', '.pl'}
+    if ext in SCRIPT_FILE_EXT:
+        text = data.decode('utf-8', errors='ignore').lower()
+        DROPPER_SIGNS = [
+            (b'/dev/tcp/', 'reverse shell via /dev/tcp'),
+            (b'nc -e', 'netcat reverse shell (nc -e)'),
+            (b'ncat', 'ncat reverse shell'),
+            (b'mkfifo', 'named pipe for reverse shell'),
+            (b'bash -i', 'interactive bash shell'),
+            (b'0>&1', 'stdin/stdout redirection (reverse shell)'),
+            (b'python -c', 'python command execution'),
+            (b'curl.*|.*bash', 'curl pipe to bash'),
+            (b'wget.*|.*bash', 'wget pipe to bash'),
+            (b'powershell', 'PowerShell execution'),
+            (b'invoke-expression', 'PowerShell Invoke-Expression'),
+            (b'iex(', 'PowerShell IEX shorthand'),
+            (b'new-object.net.webclient', '.NET WebClient download'),
+            (b'downloadstring', 'PowerShell DownloadString'),
+            (b'chmod +x', 'make executable permission'),
+            (b'base64 -d', 'base64 decode (obfuscation)'),
+            (b'eval(', 'eval() injection'),
+            (b'exec(', 'exec() injection'),
+            (b'os.system', 'OS command execution'),
+            (b'subprocess', 'subprocess execution'),
+            (b'whoami', 'user enumeration'),
+            (b'/etc/passwd', 'password file access'),
+            (b'/etc/shadow', 'shadow file access'),
+            (b'id_rsa', 'SSH key access'),
+            (b'.onion', 'Tor hidden service reference'),
+            (b'xmrig', 'cryptominer (XMRig)'),
+            (b'stratum+tcp', 'cryptocurrency mining pool'),
+        ]
+        for sig, name in DROPPER_SIGNS:
+            if sig in data:
+                detections.append(Detection(
+                    'CRITICAL', 'SCRIPT_DROPPER',
+                    f'Malicious script pattern: {name} (found "{sig.decode(errors="replace")}")'
+                ))
+
+        # Also check for IP addresses in script content (C2 indicators)
+        import re as _re
+        ips = _re.findall(rb'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b', data)
+        for ip_bytes in ips:
+            try:
+                parts = ip_bytes.decode().split('.')
+                if all(0 <= int(p) <= 255 for p in parts):
+                    ip_str = '.'.join(parts)
+                    # In scripts, any non-loopback IP is suspicious (C2 target)
+                    if not any(ip_str.startswith(p) for p in ('0.', '127.', '255.')):
+                        detections.append(Detection(
+                            'HIGH', 'SCRIPT_C2_IP',
+                            f'Potential C2 IP address in script: {ip_str}'
+                        ))
+            except (ValueError, UnicodeDecodeError):
+                pass
+
     # 6. Double extension check
     if '..' in filename:
         detections.append(Detection(

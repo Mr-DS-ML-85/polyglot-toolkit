@@ -739,7 +739,6 @@ class PolyglotApp(QMainWindow):
         ic, il = card("Input Files","📁")
         r = QHBoxLayout(); r.addWidget(QLabel("Cover:")); self.b_cover = inp("JPEG/PNG/GIF/PDF/ZIP/MP4/XLSX/DOCX..."); r.addWidget(self.b_cover,1)
         b=btn("Browse",T.DIM); b.clicked.connect(lambda:self._browse(self.b_cover)); r.addWidget(b)
-        bg=btn("📌 Shared",T.DIM); bg.clicked.connect(lambda: self.b_cover.setText(self.current_file) if self.current_file else QMessageBox.information(self,"No File","Select a file using any Browse button first.")); r.addWidget(bg)
         il.addLayout(r)
         r = QHBoxLayout(); r.addWidget(QLabel("Payload:")); self.b_payload = inp("EXE/ELF/Mach-O/BAT/VBS/script..."); r.addWidget(self.b_payload,1)
         b=btn("Browse",T.DIM); b.clicked.connect(lambda:self._browse(self.b_payload)); r.addWidget(b); il.addLayout(r)
@@ -776,7 +775,6 @@ class PolyglotApp(QMainWindow):
         ic, il = card("Scan Target","🔍")
         r = QHBoxLayout(); self.s_path = inp("File or directory..."); r.addWidget(self.s_path,1)
         for text,cb in [("File",lambda:self._browse(self.s_path)),("Dir",lambda:self._browse_dir(self.s_path)),
-                         ("📌 Use Global",self._use_global_in_scanner),
                          ("⚠ SCAN",self._run_scanner)]:
             b=btn(text,T.RED if "SCAN" in text else T.DIM); b.clicked.connect(cb); r.addWidget(b)
         self.s_use_ml = QCheckBox("Use ML Model"); self.s_use_ml.setChecked(self.model.is_loaded)
@@ -1317,7 +1315,6 @@ class PolyglotApp(QMainWindow):
         bb.setStyleSheet(f"background:{T.BLUE};color:white;border:none;border-radius:4px;padding:8px 16px")
         bb.clicked.connect(lambda: self._browse(self.da_target))
         tr.addWidget(bb)
-        gb = btn("📌 Use Global", T.DIM); gb.clicked.connect(self._use_global_in_analysis); tr.addWidget(gb)
         l.addLayout(tr)
 
         # Analysis type selector
@@ -2316,12 +2313,12 @@ class PolyglotApp(QMainWindow):
         return w
 
     def _do_dns(self):
-        import socket
-        host = self.dns_host.text().strip()
-        rtype = self.dns_type.currentText()
-        self.dns_results.clear()
-        append_log(self.dns_results, f"DNS {rtype} lookup: {host}", T.CYAN)
         try:
+            import socket
+            host = self.dns_host.text().strip()
+            rtype = self.dns_type.currentText()
+            self.dns_results.clear()
+            append_log(self.dns_results, f"DNS {rtype} lookup: {host}", T.CYAN)
             if rtype == "A":
                 results = socket.getaddrinfo(host, None, socket.AF_INET)
                 for r in results[:10]: append_log(self.dns_results, f"  A: {r[4][0]}", T.GREEN)
@@ -2357,8 +2354,11 @@ class PolyglotApp(QMainWindow):
                 results = socket.getaddrinfo(host, None)
                 for r in results[:10]: append_log(self.dns_results, f"  {r[4][0]}", T.GREEN)
             append_log(self.dns_results, f"\nLookup complete", T.DIM)
+        except RuntimeError:
+            return
         except Exception as e:
-            append_log(self.dns_results, f"Error: {e}", T.RED)
+            try: append_log(self.dns_results, f"Error: {e}", T.RED)
+            except RuntimeError: pass
 
     def _nt_whois(self):
         w = QWidget(); l = QVBoxLayout(w)
@@ -2437,7 +2437,6 @@ class PolyglotApp(QMainWindow):
         self.ioc_file = inp("File to extract IOCs from...")
         r.addWidget(self.ioc_file, 1)
         bb = btn("Browse", T.DIM); bb.clicked.connect(lambda: self._browse(self.ioc_file)); r.addWidget(bb)
-        gb = btn("📌 Shared", T.DIM); gb.clicked.connect(lambda: self.ioc_file.setText(self.current_file) if self.current_file else None); r.addWidget(gb)
         eb = btn("🔍 Extract IOCs", T.BLUE); eb.clicked.connect(self._do_ioc_extract); r.addWidget(eb)
         l.addLayout(r)
 
@@ -2626,7 +2625,6 @@ class PolyglotApp(QMainWindow):
         self.hex_file = inp("File to view...")
         top.addWidget(self.hex_file, 1)
         bb = btn("Browse", T.DIM); bb.clicked.connect(lambda: self._browse(self.hex_file)); top.addWidget(bb)
-        gb = btn("📌 Global", T.DIM); gb.clicked.connect(self._use_global_in_hex); top.addWidget(gb)
         lb = btn("Load", T.GREEN); lb.clicked.connect(self._load_hex); top.addWidget(lb)
         l.addLayout(top)
 
@@ -2920,27 +2918,6 @@ class PolyglotApp(QMainWindow):
         """Legacy — redirect to shared file."""
         p, _ = QFileDialog.getOpenFileName(self, "Select File")
         if p: self._set_shared_file(p)
-
-    def _clear_global_file(self):
-        self.current_file = None
-
-    def _use_global_in_scanner(self):
-        if self.current_file:
-            self.s_path.setText(self.current_file)
-        else:
-            QMessageBox.information(self, "No File", "Select a file using any Browse button first.")
-
-    def _use_global_in_analysis(self):
-        if self.current_file:
-            self.da_target.setText(self.current_file)
-        else:
-            QMessageBox.information(self, "No File", "Select a file using any Browse button first.")
-
-    def _use_global_in_hex(self):
-        if self.current_file:
-            self.hex_file.setText(self.current_file)
-        else:
-            QMessageBox.information(self, "No File", "Select a file using any Browse button first.")
 
     def _browse(self, entry):
         p,_ = QFileDialog.getOpenFileName(self,"Select File")

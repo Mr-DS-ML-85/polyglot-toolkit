@@ -509,6 +509,9 @@ class StegoDetector:
                 try:
                     length = struct.unpack(">I", data[pos:pos+4])[0]
                     chunk_type = data[pos+4:pos+8]
+                    # Validate: chunk type must be 4 ASCII letters, length must be sane
+                    if length > 0x7FFFFFFF or not all(65 <= b <= 122 for b in chunk_type):
+                        break  # Corrupt or end of valid chunks
                     if chunk_type not in known_chunks:
                         unknown_chunks.append(chunk_type.decode('ascii', errors='replace'))
                     pos += 12 + length

@@ -602,7 +602,7 @@ End Function
         chunk_len = struct.pack('>I', len(chunk_data))
         import zlib as _zlib
         crc = struct.pack('>I', _zlib.crc32(chunk_type + chunk_data) & 0xFFFFFFFF)
-        return c[:e] + chunk_len + chunk_type + chunk_data + crc + c[e:]
+        return c[:e-4] + chunk_len + chunk_type + chunk_data + crc + c[e-4:]
 
     def _b_gif(self, c, p):
         """GIF polyglot: payload in Application Extension sub-blocks."""
@@ -2843,26 +2843,44 @@ class PolyglotTUI:
                     except Exception as e:
                         rpt(f"  [!] {fname} — deep analysis error: {e}")
 
-                # ── Section 4: Network IOCs ──
+                # ── Section 4: Network IOCs (text files only) ──
                 if want("4"):
                     try:
-                        import re
+                        import re, ipaddress as _ipa
                         with open(fpath, 'rb') as f:
                             data = f.read(65536)
-                        text = data.decode('utf-8', errors='ignore')
 
-                        ip_re = re.compile(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b')
-                        domain_re = re.compile(r'\b([a-zA-Z0-9-]+\.(com|net|org|io|xyz|top|info|biz|ru|cn|tk|ml|ga|cf|gq))\b')
-                        url_re = re.compile(r'(https?://[^\s"\'<>]{5,})')
+                        # Only extract IOCs from text-like content
+                        # Skip binary-heavy files (images, executables, archives)
+                        _sample = data[:4096]
+                        _non_text = sum(1 for b in _sample if b < 8 or (b > 13 and b < 32 and b != 27))
+                        if _non_text <= len(_sample) * 0.3:
+                            text = data.decode('utf-8', errors='ignore')
 
-                        for ip in ip_re.findall(text):
-                            octets = ip.split('.')
-                            if all(0 <= int(o) <= 255 for o in octets):
-                                ioc_ips.add(ip)
-                        for dom, _ in domain_re.findall(text):
-                            ioc_domains.add(dom.lower())
-                        for url in url_re.findall(text):
-                            ioc_urls.add(url[:200])
+                            ip_re = re.compile(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b')
+                            domain_re = re.compile(r'\b([a-zA-Z0-9-]+\.(com|net|org|io|xyz|top|info|biz|ru|cn|tk|ml|ga|cf|gq))\b')
+                            url_re = re.compile(r'(https?://[^\s"\'<>]{5,})')
+
+                            # Script files: report ALL IPs (private = C2 targets)
+                            # Other files: only report public IPs (skip RFC1918 false positives)
+                            _is_script = os.path.splitext(fpath)[1].lower() in {'.sh','.bash','.py','.ps1','.bat','.cmd','.vbs','.rb','.pl','.lua','.js'}
+
+                            for ip in ip_re.findall(text):
+                                try:
+                                    addr = _ipa.ip_address(ip)
+                                    if addr.is_loopback or addr.is_multicast or addr.is_reserved:
+                                        continue
+                                    if _is_script or addr.is_global:
+                                        ioc_ips.add(ip)
+                                except ValueError:
+                                    pass
+                            for dom, _ in domain_re.findall(text):
+                                d = dom.lower()
+                                # Filter false positives from format parsing
+                                if not any(d.endswith(f'.{t}') for t in ('exe','dll','sys','tmp','bak')):
+                                    ioc_domains.add(d)
+                            for url in url_re.findall(text):
+                                ioc_urls.add(url[:200])
                     except Exception:
                         pass
 
