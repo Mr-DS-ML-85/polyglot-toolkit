@@ -4,8 +4,14 @@ Moves suspicious files to a secure vault with encrypted filenames,
 metadata logging, restore capability, and auto-expiry.
 """
 
-import os, json, hashlib, shutil, time, logging, fcntl
+import os, json, hashlib, shutil, time, logging
 from pathlib import Path
+
+try:
+    import fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False  # Windows — file locking not available
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
@@ -196,10 +202,10 @@ class QuarantineManager:
         # Batch write once instead of per-entry
         if purged:
             with open(self.meta_path, "w", encoding="utf-8") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                if _HAS_FCNTL: fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                 for entry in entries:
                     f.write(json.dumps(entry) + "\n")
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                if _HAS_FCNTL: fcntl.flock(f.fileno(), fcntl.LOCK_UN)
             logger.info(f"Auto-purged {purged} expired quarantine entries")
         return purged
 
@@ -247,9 +253,9 @@ class QuarantineManager:
 
     def _append_meta(self, meta: Dict):
         with open(self.meta_path, "a", encoding="utf-8") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            if _HAS_FCNTL: fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             f.write(json.dumps(meta) + "\n")
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            if _HAS_FCNTL: fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     def _read_all_meta(self) -> List[Dict]:
         if not self.meta_path.exists():
@@ -294,10 +300,10 @@ class QuarantineManager:
                 entries[i] = updated
                 break
         with open(self.meta_path, "w", encoding="utf-8") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            if _HAS_FCNTL: fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             for entry in entries:
                 f.write(json.dumps(entry) + "\n")
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            if _HAS_FCNTL: fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     def _current_size(self) -> int:
         return sum(f.stat().st_size for f in self.quarantine_dir.iterdir()
@@ -322,7 +328,7 @@ class QuarantineManager:
                 if e.get("quarantine_id") in purged_ids:
                     e["purged"] = True
             with open(self.meta_path, "w", encoding="utf-8") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                if _HAS_FCNTL: fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                 for entry in all_entries:
                     f.write(json.dumps(entry) + "\n")
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                if _HAS_FCNTL: fcntl.flock(f.fileno(), fcntl.LOCK_UN)

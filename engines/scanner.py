@@ -224,9 +224,9 @@ class Scanner:
         """Quick structural check without ML (fast path)."""
         try:
             analysis = analyze_file(filepath, self.config.get("features", {}))
-            yara_matches = self.yara.scan(
-                open(filepath, "rb").read(), analysis["entropy"]
-            )
+            with open(filepath, "rb") as _f:
+                file_data = _f.read()
+            yara_matches = self.yara.scan(file_data, analysis["entropy"])
             risk = 0.0
             if len(analysis["detected_types"]) > 1:
                 risk += 40.0

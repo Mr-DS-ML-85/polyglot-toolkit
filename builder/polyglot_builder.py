@@ -242,7 +242,7 @@ def _build_valid_pe_stub(payload_data: bytes = b'') -> bytes:
     pe[sec_off+36:sec_off+40] = struct.pack('<I', 0x60000020)
 
     sec_off += 40
-    pe[sec_off:sec_off+6] = b'.rdata\x00'
+    pe[sec_off:sec_off+7] = b'.rdata\x00'
     pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x200)
     pe[sec_off+12:sec_off+16] = struct.pack('<I', rdata_rva)
     pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x200)

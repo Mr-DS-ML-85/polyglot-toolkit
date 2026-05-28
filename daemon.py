@@ -135,13 +135,15 @@ def start_daemon(watch_dirs=None):
         )
     else:
         # On Unix, use nohup + detach
+        log_fh = open(LOG_FILE, 'a')
         proc = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "_run_monitor",
              json.dumps(config["watch_dirs"])],
-            stdout=open(LOG_FILE, 'a'),
+            stdout=log_fh,
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
+        log_fh.close()  # child has inherited the fd; parent can close
 
     PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     PID_FILE.write_text(str(proc.pid))
@@ -377,6 +379,9 @@ def _run_monitor(watch_dirs_json):
 def _notify(title, message):
     """Send desktop notification."""
     try:
+        # Sanitize to prevent injection via filenames with special chars
+        title = title.replace('"', '\\"').replace('\\', '\\\\')
+        message = message.replace('"', '\\"').replace('\\', '\\\\')
         if PLATFORM == "Linux":
             subprocess.run(["notify-send", title, message], capture_output=True)
         elif PLATFORM == "Darwin":

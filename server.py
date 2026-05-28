@@ -49,6 +49,7 @@ from polyglot_tui import PolyglotBuilder, PolyglotDetector, PolyglotSanitizer
 logger = logging.getLogger("polyglot_server")
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB upload limit
 
 # ── CORS ─────────────────────────────────────────────────────
 _ALLOWED_ORIGINS = {'http://localhost', 'http://127.0.0.1', 'http://0.0.0.0',
@@ -134,13 +135,14 @@ def sanitize_filename(filename: str) -> str:
 
 def require_api_key(f):
     """Optional API key decorator — if POLYGLOT_API_KEY env is set, checks it."""
+    import hmac
     from functools import wraps
     @wraps(f)
     def decorated(*args, **kwargs):
         expected = os.environ.get('POLYGLOT_API_KEY')
         if expected:
             provided = request.headers.get('X-API-Key', '')
-            if provided != expected:
+            if not hmac.compare_digest(provided, expected):
                 return jsonify({'error': 'Invalid or missing API key'}), 401
         return f(*args, **kwargs)
     return decorated
