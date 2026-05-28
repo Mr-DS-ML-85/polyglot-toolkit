@@ -1375,9 +1375,29 @@ class PolyglotApp(QMainWindow):
                     if eoi_count > 1: self.da_results.append("  ⚠ Multiple EOI — possible hidden data after EOF\n")
                 elif data[:4] == b'\x89PNG':
                     self.da_results.append("  Format: PNG — checking chunks...\n")
-                    import re
-                    chunks = re.findall(rb'(\w{4})', data[8:])
-                    self.da_results.append(f"  Chunk types: {', '.join(set(c.decode(errors='replace') for c in chunks))}\n")
+                    import struct as _st
+                    chunk_names = []
+                    pos = 8  # skip PNG signature
+                    known = {b'IHDR',b'PLTE',b'IDAT',b'IEND',b'tEXt',b'zTXt',b'iTXt',
+                             b'pHYs',b'tIME',b'gAMA',b'cHRM',b'sRGB',b'iCCP',b'bKGD',
+                             b'hIST',b'tRNS',b'sBIT',b'sPLT'}
+                    unknown = []
+                    while pos + 12 <= len(data):
+                        try:
+                            length = _st.unpack('>I', data[pos:pos+4])[0]
+                            ctype = data[pos+4:pos+8]
+                            if length > 0x7FFFFFFF or not all(65 <= b <= 122 for b in ctype):
+                                break  # end of valid chunks
+                            name = ctype.decode('ascii')
+                            chunk_names.append(name)
+                            if ctype not in known:
+                                unknown.append(name)
+                            pos += 12 + length
+                        except Exception:
+                            break
+                    self.da_results.append(f"  Chunk types: {', '.join(chunk_names)}\n")
+                    if unknown:
+                        self.da_results.append(f"  ⚠ Unknown chunks: {', '.join(unknown)}\n")
                 else:
                     self.da_results.append(f"  Format: general binary — entropy {self.builder.entropy(data):.4f}\n")
 

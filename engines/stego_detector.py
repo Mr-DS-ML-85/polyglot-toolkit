@@ -53,7 +53,7 @@ class StegoDetector:
 
         # Run all applicable analyses
         findings.extend(self._lsb_analysis(data, content_type))
-        findings.extend(self._chi_square_analysis(data))
+        findings.extend(self._chi_square_analysis(data, content_type))
         findings.extend(self._entropy_analysis(data, content_type))
         findings.extend(self._metadata_analysis(data, content_type, ext))
         findings.extend(self._trailing_analysis(data, content_type, ext))
@@ -100,6 +100,51 @@ class StegoDetector:
 
     # ── LSB Analysis ──────────────────────────────────────────────
 
+    def _extract_pixels(self, data: bytes, content_type: str) -> bytes:
+        """Extract raw pixel data — decompresses PNG IDAT chunks and strips filter bytes."""
+        if content_type == "png":
+            import struct as _s, zlib as _z
+            chunks = []
+            pos = 8
+            ihdr_found = False
+            width = 0
+            while pos + 8 < len(data):
+                try:
+                    length = _s.unpack(">I", data[pos:pos+4])[0]
+                    ctype = data[pos+4:pos+8]
+                    if length > 0x7FFFFFFF or not all(65 <= b <= 122 for b in ctype):
+                        break
+                    if ctype == b"IHDR" and length >= 4:
+                        width = _s.unpack(">I", data[pos+8:pos+12])[0]
+                        ihdr_found = True
+                    elif ctype == b"IDAT":
+                        chunks.append(data[pos+8:pos+8+length])
+                    pos += 12 + length
+                except Exception:
+                    break
+            if chunks:
+                try:
+                    raw = _z.decompress(b"".join(chunks))
+                    if ihdr_found and width > 0:
+                        # PNG: each row starts with a filter byte — strip them
+                        # Row size = 1 (filter) + width * bytes_per_pixel (assume 3 for RGB)
+                        bpp = 3  # Assume RGB; filter byte stripping works for all
+                        stride = 1 + width * bpp
+                        if stride > 0 and len(raw) >= stride:
+                            pixels = bytearray()
+                            for row_start in range(0, len(raw), stride):
+                                row = raw[row_start+1:row_start+stride]  # skip filter byte
+                                pixels.extend(row)
+                            return bytes(pixels)
+                    return raw
+                except Exception:
+                    pass
+        # Fallback: raw pixel data start
+        pixel_start = self._find_pixel_data_start(data, content_type)
+        if pixel_start >= 0 and pixel_start < len(data):
+            return data[pixel_start:]
+        return data
+
     def _lsb_analysis(self, data: bytes, content_type: str) -> List[StegoFinding]:
         """Detect LSB steganography via bit-plane analysis."""
         findings = []
@@ -107,12 +152,8 @@ class StegoDetector:
         if content_type not in ("png", "bmp", "tiff", "gif"):
             return findings
 
-        # Extract pixel data (simplified — skip headers)
-        pixel_start = self._find_pixel_data_start(data, content_type)
-        if pixel_start < 0 or pixel_start >= len(data) - 100:
-            return findings
-
-        pixel_data = data[pixel_start:]
+        # Extract DECOMPRESSED pixel data (critical for PNG — IDAT is zlib compressed)
+        pixel_data = self._extract_pixels(data, content_type)
         if len(pixel_data) < 100:
             return findings
 
@@ -130,11 +171,11 @@ class StegoDetector:
         # Steganography pushes it very close to 0.5
         deviation = abs(ratio - 0.5)
 
-        if deviation < 0.005:
+        if deviation < 0.003:
             findings.append(StegoFinding(
                 method="LSB Analysis",
                 severity="high",
-                confidence=0.8,
+                confidence=0.7,
                 description=f"Suspiciously uniform LSB distribution ({ratio:.4f})",
                 details={"lsb_ratio": ratio, "deviation": deviation}
             ))
@@ -151,12 +192,13 @@ class StegoDetector:
         # Extract LSB plane and check if it looks like random data
         lsb_plane = bytes(b & 1 for b in pixel_data[:4096])
         lsb_entropy = self._shannon_bytes(lsb_plane)
-        if lsb_entropy > 0.95:
+        # Natural images have LSB entropy ~0.92-0.98; only flag > 0.995
+        if lsb_entropy > 0.995:
             findings.append(StegoFinding(
                 method="LSB Entropy",
                 severity="high",
-                confidence=0.7,
-                description=f"LSB plane has near-maximum entropy ({lsb_entropy:.3f}) — possible hidden data",
+                confidence=0.6,
+                description=f"LSB plane has near-perfect random entropy ({lsb_entropy:.3f}) — possible hidden data",
                 details={"lsb_entropy": lsb_entropy}
             ))
 
@@ -164,17 +206,27 @@ class StegoDetector:
 
     # ── Chi-Square Analysis ───────────────────────────────────────
 
-    def _chi_square_analysis(self, data: bytes) -> List[StegoFinding]:
+    def _chi_square_analysis(self, data: bytes, content_type: str = "unknown") -> List[StegoFinding]:
         """Chi-square test for steganographic content."""
         findings = []
 
+        # For compressed formats (PNG, etc.), analyze decompressed pixel data
+        # Compressed data is always near-uniform — false positive if analyzed raw
+        if content_type == "png":
+            pixel_data = self._extract_pixels(data, content_type)
+            if len(pixel_data) < 1000:
+                return findings
+            analysis_data = pixel_data
+        else:
+            analysis_data = data
+
         # Count byte frequencies
         freq = [0] * 256
-        for b in data:
+        for b in analysis_data:
             freq[b] += 1
 
         # Chi-square test: compare observed vs expected (uniform)
-        expected = len(data) / 256
+        expected = len(analysis_data) / 256
         chi_sq = sum((obs - expected) ** 2 / expected for obs in freq)
 
         # Degrees of freedom = 255
@@ -228,14 +280,20 @@ class StegoDetector:
         """Analyze entropy distribution for anomalies."""
         findings = []
 
-        if len(data) < 1024:
+        # For compressed formats, analyze decompressed pixel data
+        if content_type == "png":
+            analysis_data = self._extract_pixels(data, content_type)
+        else:
+            analysis_data = data
+
+        if len(analysis_data) < 1024:
             return findings
 
         # Chunk-based entropy analysis
-        chunk_size = max(256, len(data) // 32)
+        chunk_size = max(256, len(analysis_data) // 32)
         entropies = []
-        for i in range(0, len(data) - chunk_size, chunk_size):
-            chunk = data[i:i+chunk_size]
+        for i in range(0, len(analysis_data) - chunk_size, chunk_size):
+            chunk = analysis_data[i:i+chunk_size]
             ent = self._shannon_bytes(chunk)
             entropies.append(ent)
 
@@ -258,14 +316,15 @@ class StegoDetector:
                              "entropy_profile": [round(e, 2) for e in entropies[:16]]}
                 ))
 
-        # Overall high entropy in image file suggests encrypted payload
+        # Overall high entropy — only flag if EXTREMELY high (near 8.0 max)
+        # Natural photos routinely hit 7.5+ entropy; only encrypted/compressed payloads reach 7.95+
         avg_entropy = sum(entropies) / len(entropies)
-        if content_type in ("png", "jpeg", "bmp") and avg_entropy > 7.5:
+        if content_type in ("png", "jpeg", "bmp") and avg_entropy > 7.95:
             findings.append(StegoFinding(
                 method="Overall Entropy",
                 severity="medium",
-                confidence=0.5,
-                description=f"Very high average entropy ({avg_entropy:.2f}) for image file",
+                confidence=0.4,
+                description=f"Near-maximum average entropy ({avg_entropy:.2f}) — possible encrypted payload",
                 details={"avg_entropy": avg_entropy}
             ))
 
@@ -351,11 +410,7 @@ class StegoDetector:
         """Analyze inter-channel correlation for steganography."""
         findings = []
 
-        pixel_start = self._find_pixel_data_start(data, content_type)
-        if pixel_start < 0:
-            return findings
-
-        pixel_data = data[pixel_start:]
+        pixel_data = self._extract_pixels(data, content_type)
         if len(pixel_data) < 300:
             return findings
 
@@ -376,16 +431,17 @@ class StegoDetector:
         rb_corr = self._correlation(r_vals, b_vals)
         gb_corr = self._correlation(g_vals, b_vals)
 
-        # Natural images have high inter-channel correlation
-        # LSB stego reduces it
+        # Natural images have moderate inter-channel correlation
+        # LSB stego reduces it significantly — but many natural photos have low correlation too
+        # Only flag when ALL channel pairs have very low correlation (strong stego indicator)
         avg_corr = (abs(rg_corr) + abs(rb_corr) + abs(gb_corr)) / 3
 
-        if avg_corr < 0.3:
+        if avg_corr < 0.01:
             findings.append(StegoFinding(
                 method="Channel Correlation",
                 severity="medium",
-                confidence=0.55,
-                description=f"Low inter-channel correlation ({avg_corr:.3f}) — possible LSB manipulation",
+                confidence=0.4,
+                description=f"Very low inter-channel correlation ({avg_corr:.3f}) — possible LSB manipulation",
                 details={"rg": round(rg_corr, 3), "rb": round(rb_corr, 3),
                          "gb": round(gb_corr, 3), "avg": round(avg_corr, 3)}
             ))

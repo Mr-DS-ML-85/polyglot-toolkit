@@ -24,7 +24,9 @@ Detection = namedtuple('Detection', ['severity', 'indicator', 'details'])
 # Magic bytes and signatures
 # ============================================================
 
-# Executable signatures
+# Executable signatures (4+ bytes to avoid false positives in binary data)
+# NOTE: b'#!' removed — 2-byte sig causes massive false positives in PNG/JPEG compressed data
+# Script detection is handled separately for .sh/.py/.bat files in section 5b
 EXE_SIGNATURES = {
     b'MZ': 'PE/DOS Executable (MZ header)',
     b'\x7fELF': 'ELF Executable',
@@ -32,7 +34,6 @@ EXE_SIGNATURES = {
     b'\xfe\xed\xfa\xcf': 'Mach-O 64-bit',
     b'\xcf\xfa\xed\xfe': 'Mach-O 64-bit (reversed)',
     b'\xce\xfa\xed\xfe': 'Mach-O 32-bit (reversed)',
-    b'#!': 'Shell script (shebang)',
     b'\x00asm': 'WebAssembly module',
 }
 
@@ -284,8 +285,12 @@ def scan_file(filepath: str, verbose: bool = False) -> list:
                             is_valid = _validate_pe_at(data, pos)
                         elif sig_bytes == b'\x7fELF':
                             is_valid = _validate_elf_at(data, pos)
+                        elif sig_bytes == b'#!':
+                            # Shebang must be followed by a path (#!/bin/bash etc.)
+                            after = data[pos:pos+32]
+                            is_valid = after.startswith(b'#!/') or after.startswith(b'#! /')
                         else:
-                            is_valid = True  # Other signatures are fine
+                            is_valid = True  # Mach-O, WebAssembly — 4+ byte sigs are rare false positives
 
                         if is_valid:
                             detections.append(Detection(
