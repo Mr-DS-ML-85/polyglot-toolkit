@@ -2972,10 +2972,29 @@ class PolyglotApp(QMainWindow):
         cover = self.b_cover.text().strip(); payload = self.b_payload.text().strip()
         if not cover or not os.path.isfile(cover): QMessageBox.warning(self,"Error","Select a valid cover file"); return
         if not payload or not os.path.isfile(payload): QMessageBox.warning(self,"Error","Select a valid payload file"); return
+
+        # Auto-detect container type from cover file magic bytes
+        try:
+            with open(cover, 'rb') as f:
+                magic = f.read(16)
+            auto_ct = None
+            if magic[:8] == b'\x89PNG\r\n\x1a\n': auto_ct = 'PNG'
+            elif magic[:2] == b'\xff\xd8': auto_ct = 'JPEG'
+            elif magic[:6] in (b'GIF87a', b'GIF89a'): auto_ct = 'GIF'
+            elif magic[:4] == b'%PDF': auto_ct = 'PDF'
+            elif magic[:2] == b'PK': auto_ct = 'ZIP'
+            if auto_ct and auto_ct != self.b_type.currentText():
+                self.b_type.setCurrentText(auto_ct)
+                append_log(self.b_log, f"  Auto-detected container: {auto_ct}", T.CYAN)
+        except Exception:
+            pass
+
         ext_map={'JPEG':'.jpg','PNG':'.png','GIF':'.gif','PDF':'.pdf','ZIP':'.zip','MP4':'.mp4','XLSX':'.xlsx','DOCX':'.docx'}
         ct = self.b_type.currentText()
         output,_ = QFileDialog.getSaveFileName(self,"Save Polyglot As",f"polyglot{ext_map.get(ct,'.bin')}",f"{ct} Files (*{ext_map.get(ct,'.*')});;All Files (*)")
-        if not output: return
+        if not output:
+            append_log(self.b_log, "  Build cancelled.", T.DIM)
+            return
         # Get payload type, target OS, and architecture
         pt = self.b_payload_type.currentText()
         payload_type = None if pt == 'Auto' else pt.lower()
