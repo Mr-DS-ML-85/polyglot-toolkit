@@ -588,7 +588,7 @@ End Function
         result = c[:e+2]
         for i in range(0, len(p), 65533):
             chunk = p[i:i+65533]
-            result += b'\xff\xfe' + struct.pack('<H', len(chunk) + 2) + chunk
+            result += b'\xff\xfe' + struct.pack('>H', len(chunk) + 2) + chunk
         result += b'\xff\xd9'
         return result
 
@@ -815,7 +815,7 @@ End Function
 
         # .rdata section
         sec_off += 40
-        pe[sec_off:sec_off+6] = b'.rdata\x00'
+        pe[sec_off:sec_off+7] = b'.rdata\x00'
         pe[sec_off+8:sec_off+12] = struct.pack('<I', rdata_size)
         pe[sec_off+12:sec_off+16] = struct.pack('<I', rdata_rva)
         pe[sec_off+16:sec_off+20] = struct.pack('<I', rdata_padded)
@@ -1221,7 +1221,7 @@ End Function
         off = text_seg_off
         s.pack_into('<I', macho, off, 0x19)        # cmd: LC_SEGMENT_64
         s.pack_into('<I', macho, off+4, text_seg_size)  # cmdsize
-        macho[off+8:off+14] = b'__TEXT\x00'        # segname
+        macho[off+8:off+15] = b'__TEXT\x00'        # segname (7 bytes)
         s.pack_into('<Q', macho, off+24, 0x100000000)   # vmaddr
         s.pack_into('<Q', macho, off+32, total_size)     # vmsize
         s.pack_into('<Q', macho, off+40, 0)              # fileoff
@@ -1242,7 +1242,7 @@ End Function
             off = data_seg_off
             s.pack_into('<I', macho, off, 0x19)        # cmd: LC_SEGMENT_64
             s.pack_into('<I', macho, off+4, data_seg_size)  # cmdsize
-            macho[off+8:off+14] = b'__DATA\x00'        # segname
+            macho[off+8:off+15] = b'__DATA\x00'        # segname (7 bytes)
             s.pack_into('<Q', macho, off+24, payload_vaddr)  # vmaddr
             s.pack_into('<Q', macho, off+32, len(payload_data))  # vmsize
             s.pack_into('<Q', macho, off+40, payload_off)        # fileoff
@@ -1793,7 +1793,7 @@ End Function
         pe[sec_off+36:sec_off+40] = struct.pack('<I', 0x60000020)
         # .rdata
         sec_off += 40
-        pe[sec_off:sec_off+6] = b'.rdata\x00'
+        pe[sec_off:sec_off+7] = b'.rdata\x00'
         pe[sec_off+8:sec_off+12] = struct.pack('<I', 0x200)
         pe[sec_off+12:sec_off+16] = struct.pack('<I', rdata_rva)
         pe[sec_off+16:sec_off+20] = struct.pack('<I', 0x200)

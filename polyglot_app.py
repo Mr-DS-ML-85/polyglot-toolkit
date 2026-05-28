@@ -191,7 +191,7 @@ class PolyglotBuilder:
         if c[:2]!=b'\xff\xd8': raise ValueError("Not JPEG")
         e=c.rfind(b'\xff\xd9')
         if e==-1: raise ValueError("No EOI")
-        return c[:e+2]+b'\xff\xfe'+struct.pack('<H',min(len(p),65533))+p
+        return c[:e+2]+b'\xff\xfe'+struct.pack('>H',min(len(p),65533))+p
 
     def _p(self,c,p):
         if c[:8]!=b'\x89PNG\r\n\x1a\n': raise ValueError("Not PNG")

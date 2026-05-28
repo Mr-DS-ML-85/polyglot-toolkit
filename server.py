@@ -29,7 +29,6 @@ import sys, os, json, time, logging, argparse, tempfile
 from pathlib import Path
 from datetime import datetime
 from collections import deque
-import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
@@ -52,10 +51,17 @@ logger = logging.getLogger("polyglot_server")
 app = Flask(__name__)
 
 # ── CORS ─────────────────────────────────────────────────────
+_ALLOWED_ORIGINS = {'http://localhost', 'http://127.0.0.1', 'http://0.0.0.0',
+                    'null'}  # 'null' for file:// origins
+
 @app.after_request
 def add_cors_headers(response):
-    origin = request.headers.get('Origin', '*')
-    response.headers['Access-Control-Allow-Origin'] = origin
+    origin = request.headers.get('Origin', '')
+    # Only allow localhost / file origins; reflect if valid, else wildcard
+    if any(origin.startswith(o) for o in _ALLOWED_ORIGINS) or not origin:
+        response.headers['Access-Control-Allow-Origin'] = origin or '*'
+    else:
+        response.headers['Access-Control-Allow-Origin'] = 'http://localhost'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-API-Key'
     response.headers['Access-Control-Allow-Credentials'] = 'true'
@@ -79,6 +85,11 @@ def check_rate_limit():
         if len(_rate_store[ip]) >= RATE_LIMIT:
             return False
         _rate_store[ip].append(now)
+        # Periodic cleanup: purge stale IPs to prevent memory leak
+        if len(_rate_store) > 10000:
+            stale = [k for k, v in _rate_store.items() if not v or v[-1] < now - 120]
+            for k in stale:
+                del _rate_store[k]
         return True
 
 @app.before_request
@@ -658,9 +669,9 @@ def api_monitor_start():
                 time.sleep(3)
             except: time.sleep(5)
 
+    state.monitor_running = True
     state.monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
     state.monitor_thread.start()
-    state.monitor_running = True
 
     return jsonify({'status': 'started', 'directory': directory})
 

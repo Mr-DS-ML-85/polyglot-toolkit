@@ -11,6 +11,7 @@ License: MIT
 
 import argparse
 import os
+import struct
 import sys
 import shutil
 from pathlib import Path
@@ -341,5 +342,4 @@ def main():
 
 
 if __name__ == '__main__':
-    import struct  # needed for BMP/ZIP parsing
     main()
